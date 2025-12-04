@@ -1,20 +1,226 @@
+import { useState } from 'react';
+import { useSettings } from '../../context/SettingsContext';
+import { usePlans } from '../../context/PlansContext';
+import { useCompetitors } from '../../context/CompetitorsContext';
+import { useAnalysis } from '../../context/AnalysisContext';
+
 const Settings = () => {
+  const { profile, updateProfile } = useSettings();
+  const { clearPlans } = usePlans();
+  const { clearCompetitors } = useCompetitors();
+  const { clearAnalyses } = useAnalysis();
+
+  const [showSavedMessage, setShowSavedMessage] = useState(false);
+
+  const handleInputChange = (field, value) => {
+    updateProfile({ [field]: value });
+    
+    // Show "saved" message briefly
+    setShowSavedMessage(true);
+    setTimeout(() => {
+      setShowSavedMessage(false);
+    }, 2000);
+  };
+
+  const handleResetDemoData = () => {
+    const confirmed = window.confirm(
+      'This will clear all local plans, competitors, and analyses. Are you sure?'
+    );
+
+    if (confirmed) {
+      clearPlans();
+      clearCompetitors();
+      clearAnalyses();
+      
+      // Show success message or feedback
+      alert('Demo data has been reset successfully.');
+    }
+  };
+
   return (
-    <div className="max-w-7xl mx-auto">
-      <div className="bg-slate-900/50 backdrop-blur-sm rounded-2xl p-12 border border-slate-800 text-center">
-        <div className="w-16 h-16 bg-blue-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
-          <svg className="w-8 h-8 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-          </svg>
-        </div>
-        <h2 className="text-2xl font-bold text-white mb-3">
+    <div className="max-w-5xl mx-auto space-y-8">
+      {/* Page Header */}
+      <div>
+        <h1 className="text-3xl font-bold text-white mb-2">
           Settings
-        </h2>
-        <p className="text-slate-400 mb-6">
-          Account and integration settings coming soon
+        </h1>
+        <p className="text-slate-400">
+          Manage your profile and workspace preferences. These settings are local for now and will be extended with real accounts later.
         </p>
-        <div className="inline-block px-4 py-1.5 bg-blue-500/10 border border-blue-500/30 rounded-full text-sm font-medium text-blue-400">
-          Coming Soon
+      </div>
+
+      {/* Profile & Workspace Section */}
+      <div className="bg-slate-900/50 backdrop-blur-sm rounded-2xl p-8 border border-slate-800">
+        <div className="mb-6">
+          <h2 className="text-xl font-semibold text-white mb-2">
+            Profile & Workspace
+          </h2>
+          <p className="text-sm text-slate-400">
+            Your personal information and company details.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Full Name */}
+          <div>
+            <label htmlFor="fullName" className="block text-sm font-semibold text-slate-300 mb-2">
+              Full Name
+            </label>
+            <input
+              id="fullName"
+              type="text"
+              value={profile.fullName}
+              onChange={(e) => handleInputChange('fullName', e.target.value)}
+              className="w-full px-4 py-3 rounded-xl bg-slate-900/50 border border-slate-700 text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+              placeholder="John Doe"
+            />
+          </div>
+
+          {/* Email */}
+          <div>
+            <label htmlFor="email" className="block text-sm font-semibold text-slate-300 mb-2">
+              Email
+            </label>
+            <input
+              id="email"
+              type="email"
+              value={profile.email}
+              onChange={(e) => handleInputChange('email', e.target.value)}
+              className="w-full px-4 py-3 rounded-xl bg-slate-900/50 border border-slate-700 text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+              placeholder="john@example.com"
+            />
+          </div>
+
+          {/* Role */}
+          <div>
+            <label htmlFor="role" className="block text-sm font-semibold text-slate-300 mb-2">
+              Role
+            </label>
+            <input
+              id="role"
+              type="text"
+              value={profile.role}
+              onChange={(e) => handleInputChange('role', e.target.value)}
+              className="w-full px-4 py-3 rounded-xl bg-slate-900/50 border border-slate-700 text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+              placeholder="Founder, Head of Product, etc."
+            />
+          </div>
+
+          {/* Currency */}
+          <div>
+            <label htmlFor="currency" className="block text-sm font-semibold text-slate-300 mb-2">
+              Currency
+            </label>
+            <select
+              id="currency"
+              value={profile.currency}
+              onChange={(e) => handleInputChange('currency', e.target.value)}
+              className="w-full px-4 py-3 rounded-xl bg-slate-900/50 border border-slate-700 text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all appearance-none pr-10"
+              style={{
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23cbd5e1'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+                backgroundRepeat: 'no-repeat',
+                backgroundPosition: 'right 0.75rem center',
+                backgroundSize: '1.5rem'
+              }}
+            >
+              <option value="EUR">EUR (€)</option>
+              <option value="USD">USD ($)</option>
+              <option value="GBP">GBP (£)</option>
+            </select>
+          </div>
+
+          {/* Company Name */}
+          <div>
+            <label htmlFor="companyName" className="block text-sm font-semibold text-slate-300 mb-2">
+              Company Name
+            </label>
+            <input
+              id="companyName"
+              type="text"
+              value={profile.companyName}
+              onChange={(e) => handleInputChange('companyName', e.target.value)}
+              className="w-full px-4 py-3 rounded-xl bg-slate-900/50 border border-slate-700 text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+              placeholder="Acme Inc."
+            />
+          </div>
+
+          {/* Company Website */}
+          <div>
+            <label htmlFor="companyWebsite" className="block text-sm font-semibold text-slate-300 mb-2">
+              Company Website <span className="text-slate-500 font-normal">(optional)</span>
+            </label>
+            <input
+              id="companyWebsite"
+              type="url"
+              value={profile.companyWebsite}
+              onChange={(e) => handleInputChange('companyWebsite', e.target.value)}
+              className="w-full px-4 py-3 rounded-xl bg-slate-900/50 border border-slate-700 text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+              placeholder="https://acme.com"
+            />
+          </div>
+        </div>
+
+        {/* Saved Indicator */}
+        {showSavedMessage && (
+          <div className="mt-6 p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+            <p className="text-sm text-blue-400">
+              Changes saved locally
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Demo Environment Section */}
+      <div className="bg-slate-900/50 backdrop-blur-sm rounded-2xl p-8 border border-slate-800">
+        <div className="mb-6">
+          <h2 className="text-xl font-semibold text-white mb-2">
+            Demo Environment
+          </h2>
+          <p className="text-sm text-slate-400">
+            This environment is currently running in demo mode. You can clear all local pricing data (plans, competitors, and analyses) to start over.
+          </p>
+        </div>
+
+        <div className="flex items-start gap-4 p-4 bg-slate-800/30 rounded-xl border border-slate-700 mb-6">
+          <svg className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <div>
+            <h3 className="text-white font-medium mb-1">
+              Warning
+            </h3>
+            <p className="text-sm text-slate-400 leading-relaxed">
+              Resetting demo data will permanently delete all plans, competitors, and pricing analyses from your browser. This action cannot be undone.
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={handleResetDemoData}
+          className="px-6 py-3 bg-slate-800 text-red-400 border border-red-500/30 rounded-xl font-semibold hover:bg-red-500/10 hover:border-red-500/50 transition-all"
+        >
+          Reset Demo Data
+        </button>
+
+        <p className="mt-4 text-sm text-slate-500">
+          This only affects local demo data in your browser. No real accounts or billing data are involved yet.
+        </p>
+      </div>
+
+      {/* Additional Info */}
+      <div className="bg-blue-500/5 backdrop-blur-sm rounded-2xl p-6 border border-blue-500/20">
+        <div className="flex items-start gap-3">
+          <svg className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div>
+            <h3 className="text-white font-semibold mb-1">
+              About Demo Mode
+            </h3>
+            <p className="text-sm text-slate-300 leading-relaxed">
+              You're currently using Revalyze in demo mode. All data is stored locally in your browser. Once we launch full accounts and billing, you'll be able to sync your data across devices and collaborate with your team.
+            </p>
+          </div>
         </div>
       </div>
     </div>
@@ -22,4 +228,3 @@ const Settings = () => {
 };
 
 export default Settings;
-

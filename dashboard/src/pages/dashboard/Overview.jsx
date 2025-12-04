@@ -1,13 +1,32 @@
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { useCompetitors } from '../../context/CompetitorsContext';
+import { usePlans } from '../../context/PlansContext';
+import { useAnalysis } from '../../context/AnalysisContext';
 
 const Overview = () => {
+  const navigate = useNavigate();
+  const { competitors } = useCompetitors();
+  const { plans } = usePlans();
+  const { analyses, runAnalysis } = useAnalysis();
+
   const checklistItems = [
     { label: 'Created account', completed: true },
     { label: 'Completed onboarding', completed: true },
-    { label: 'Connected Stripe', completed: false },
-    { label: 'Added competitors', completed: false },
-    { label: 'Ran first pricing analysis', completed: false }
+    { label: 'Defined current plans', completed: plans.length > 0 },
+    { label: 'Added competitors', completed: competitors.length > 0 },
+    { label: 'Ran first pricing analysis', completed: analyses.length > 0 }
   ];
+
+  const hasPlans = plans.length > 0;
+  const hasCompetitors = competitors.length > 0;
+  const hasAnalysis = analyses.length > 0;
+
+  const handleRunAnalysis = () => {
+    if (hasPlans && hasCompetitors) {
+      runAnalysis({ plans, competitors });
+      navigate('/app/analyses');
+    }
+  };
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
@@ -34,9 +53,9 @@ const Overview = () => {
                   className="flex items-center gap-3 p-3 rounded-xl bg-slate-800/50 border border-slate-700"
                 >
                   <div
-                    className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
+                    className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
                       item.completed
-                        ? 'bg-blue-500'
+                        ? 'bg-blue-500 shadow-lg shadow-blue-500/50'
                         : 'bg-slate-700 border border-slate-600'
                     }`}
                   >
@@ -47,7 +66,7 @@ const Overview = () => {
                     )}
                   </div>
                   <span
-                    className={item.completed ? 'text-slate-300' : 'text-slate-400'}
+                    className={`${item.completed ? 'text-slate-300' : 'text-slate-400'} transition-colors`}
                   >
                     {item.label}
                   </span>
@@ -60,7 +79,7 @@ const Overview = () => {
         {/* Right: Next Action */}
         <div className="bg-gradient-to-br from-blue-500/10 to-indigo-500/10 backdrop-blur-sm rounded-2xl p-6 border border-blue-500/20">
           <div className="flex items-start gap-3 mb-6">
-            <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center flex-shrink-0">
+            <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center flex-shrink-0 shadow-lg shadow-blue-500/50">
               <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
@@ -70,17 +89,47 @@ const Overview = () => {
                 Next best action
               </h3>
               <p className="text-sm text-slate-400">
-                Add your competitors to get started with pricing analysis
+                {!hasPlans 
+                  ? "Define your current pricing plans to start the analysis."
+                  : !hasCompetitors
+                  ? "Add competitors so Revalyze can benchmark your pricing."
+                  : !hasAnalysis
+                  ? "You're all set! Run your first pricing analysis."
+                  : "Review your latest pricing analysis or run a new one."
+                }
               </p>
             </div>
           </div>
 
-          <Link
-            to="/app/competitors"
-            className="block w-full px-4 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl font-semibold hover:from-blue-600 hover:to-indigo-700 transition-all hover:scale-105 text-center shadow-lg shadow-blue-500/20"
-          >
-            Go to competitors
-          </Link>
+          {!hasPlans ? (
+            <button
+              onClick={() => navigate('/app/plans')}
+              className="block w-full px-4 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl font-semibold hover:from-blue-600 hover:to-indigo-700 transition-all hover:scale-105 text-center shadow-lg shadow-blue-500/20"
+            >
+              Go to My Pricing
+            </button>
+          ) : !hasCompetitors ? (
+            <button
+              onClick={() => navigate('/app/competitors')}
+              className="block w-full px-4 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl font-semibold hover:from-blue-600 hover:to-indigo-700 transition-all hover:scale-105 text-center shadow-lg shadow-blue-500/20"
+            >
+              Go to Competitors
+            </button>
+          ) : !hasAnalysis ? (
+            <button
+              onClick={handleRunAnalysis}
+              className="block w-full px-4 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl font-semibold hover:from-blue-600 hover:to-indigo-700 transition-all hover:scale-105 text-center shadow-lg shadow-blue-500/20"
+            >
+              Run Analysis
+            </button>
+          ) : (
+            <button
+              onClick={() => navigate('/app/analyses')}
+              className="block w-full px-4 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl font-semibold hover:from-blue-600 hover:to-indigo-700 transition-all hover:scale-105 text-center shadow-lg shadow-blue-500/20"
+            >
+              View Analysis
+            </button>
+          )}
         </div>
       </div>
 
@@ -147,26 +196,39 @@ const Overview = () => {
         </h2>
         <div className="grid md:grid-cols-4 gap-4">
           <div className="bg-slate-900/50 backdrop-blur-sm rounded-xl p-6 border border-slate-800">
+            <div className="text-sm text-slate-400 mb-1">Plans Defined</div>
+            <div className="text-3xl font-bold text-white">{plans.length}</div>
+          </div>
+          <div className="bg-slate-900/50 backdrop-blur-sm rounded-xl p-6 border border-slate-800">
             <div className="text-sm text-slate-400 mb-1">Competitors Added</div>
-            <div className="text-3xl font-bold text-white">0</div>
+            <div className="text-3xl font-bold text-white">{competitors.length}</div>
           </div>
           <div className="bg-slate-900/50 backdrop-blur-sm rounded-xl p-6 border border-slate-800">
             <div className="text-sm text-slate-400 mb-1">Analyses Run</div>
-            <div className="text-3xl font-bold text-white">0</div>
+            <div className="text-3xl font-bold text-white">{analyses.length}</div>
           </div>
           <div className="bg-slate-900/50 backdrop-blur-sm rounded-xl p-6 border border-slate-800">
             <div className="text-sm text-slate-400 mb-1">Reports Generated</div>
             <div className="text-3xl font-bold text-white">0</div>
           </div>
-          <div className="bg-slate-900/50 backdrop-blur-sm rounded-xl p-6 border border-slate-800">
-            <div className="text-sm text-slate-400 mb-1">Data Sources</div>
-            <div className="text-3xl font-bold text-white">0</div>
-          </div>
         </div>
+        
+        {/* Analysis Progress Insight */}
+        {analyses.length > 0 && (
+          <div className="mt-4 p-4 bg-blue-500/5 border border-blue-500/20 rounded-xl">
+            <p className="text-sm text-slate-300">
+              {analyses.length === 1
+                ? "You've run 1 analysis so far. "
+                : `You've run ${analyses.length} analyses so far. `}
+              {analyses.length >= 3
+                ? "Great progress! Track your pricing evolution over time in the Analyses page."
+                : "Keep running analyses to track your pricing evolution over time."}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
 export default Overview;
-

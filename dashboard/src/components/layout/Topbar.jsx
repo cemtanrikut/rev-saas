@@ -1,15 +1,18 @@
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 const Topbar = () => {
   const location = useLocation();
+  const navigate = useNavigate();
 
   const getPageTitle = () => {
     const path = location.pathname;
     if (path.includes('overview')) return 'Overview';
     if (path.includes('analyses')) return 'Analyses';
     if (path.includes('competitors')) return 'Competitors';
+    if (path.includes('plans')) return 'My Pricing';
     if (path.includes('reports')) return 'Reports';
     if (path.includes('settings')) return 'Settings';
+    if (path.includes('billing')) return 'Billing & Subscription';
     return 'Dashboard';
   };
 
@@ -25,7 +28,10 @@ const Topbar = () => {
       {/* Right side */}
       <div className="flex items-center gap-4">
         {/* Upgrade Button */}
-        <button className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg font-medium hover:from-blue-600 hover:to-indigo-700 transition-all hover:scale-105 text-sm shadow-lg shadow-blue-500/20">
+        <button 
+          onClick={() => navigate('/app/billing')}
+          className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg font-medium hover:from-blue-600 hover:to-indigo-700 transition-all hover:scale-105 text-sm shadow-lg shadow-blue-500/20"
+        >
           Upgrade
         </button>
 
@@ -39,4 +45,5 @@ const Topbar = () => {
 };
 
 export default Topbar;
+
 
