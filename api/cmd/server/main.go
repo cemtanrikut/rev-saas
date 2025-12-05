@@ -11,8 +11,10 @@ import (
 
 	"rev-saas-api/internal/config"
 	"rev-saas-api/internal/handler"
+	"rev-saas-api/internal/middleware"
 	mongorepo "rev-saas-api/internal/repository/mongo"
 	"rev-saas-api/internal/router"
+	"rev-saas-api/internal/service"
 )
 
 func main() {
@@ -32,11 +34,33 @@ func main() {
 		}
 	}()
 
+	// Get database instance
+	db := mongoClient.DB()
+
+	// Initialize repositories
+	userRepo := mongorepo.NewUserRepository(db)
+	companyRepo := mongorepo.NewCompanyRepository(db)
+	userMetadataRepo := mongorepo.NewUserMetadataRepository(db)
+	planRepo := mongorepo.NewPlanRepository(db)
+	competitorRepo := mongorepo.NewCompetitorRepository(db)
+
+	// Initialize services
+	jwtService := service.NewJWTService(cfg.JWTSecret)
+	authService := service.NewAuthService(userRepo, companyRepo, userMetadataRepo, jwtService)
+	planService := service.NewPlanService(planRepo)
+	competitorService := service.NewCompetitorService(competitorRepo)
+
+	// Initialize middleware
+	authMiddleware := middleware.NewAuthMiddleware(jwtService)
+
 	// Initialize handlers
 	healthHandler := handler.NewHealthHandler()
+	authHandler := handler.NewAuthHandler(authService)
+	planHandler := handler.NewPlanHandler(planService)
+	competitorHandler := handler.NewCompetitorHandler(competitorService)
 
 	// Create router
-	r := router.NewRouter(healthHandler)
+	r := router.NewRouter(healthHandler, authHandler, planHandler, competitorHandler, authMiddleware)
 
 	// Configure HTTP server
 	srv := &http.Server{
