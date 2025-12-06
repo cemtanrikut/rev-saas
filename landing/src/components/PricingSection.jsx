@@ -29,7 +29,7 @@ const PricingCard = ({ plan, price, description, features, isPopular, delay }) =
       <div className="mb-8">
         <h3 className="text-xl font-semibold text-white mb-3">{plan}</h3>
         <div className="flex items-baseline mb-3">
-          <span className="text-5xl font-bold bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">€{price}</span>
+          <span className="text-5xl font-bold bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">{price}</span>
           <span className="text-slate-400 ml-2">/month</span>
         </div>
         <p className="text-slate-400">{description}</p>
@@ -57,7 +57,7 @@ const PricingCard = ({ plan, price, description, features, isPopular, delay }) =
             : 'bg-slate-700 text-white hover:bg-slate-600 shadow-sm hover:shadow-md hover:scale-105'
         }`}
       >
-        Choose Plan
+        Get Started
       </button>
     </motion.div>
   );
@@ -67,42 +67,44 @@ const PricingSection = () => {
   const plans = [
     {
       plan: "Starter",
-      price: 39,
-      description: "For early-stage SaaS",
+      price: "€69",
+      description: "For early-stage SaaS founders",
       features: [
-        "1 Stripe account",
         "Up to 3 competitors",
-        "Basic analytics",
-        "Monthly reports",
-        "Email support"
+        "Up to 3 pricing plans",
+        "5 analyses per month",
+        "AI-powered pricing report",
+        "PDF export included"
       ],
       isPopular: false
     },
     {
       plan: "Growth",
-      price: 129,
-      description: "For growing SaaS companies",
+      price: "€159",
+      description: "For scaling SaaS companies",
       features: [
-        "3 Stripe accounts",
-        "Up to 10 competitors",
-        "Advanced analytics",
-        "Weekly insights",
-        "Scenario modeling",
-        "Priority support"
+        "Up to 5 competitors",
+        "Up to 5 pricing plans",
+        "10 analyses per month",
+        "Multi-scenario AI reports",
+        "Pricing trend insights",
+        "Request competitor additions",
+        "CSV & Excel export"
       ],
       isPopular: true
     },
     {
       plan: "Enterprise",
-      price: 299,
-      description: "For scaling businesses",
+      price: "€399",
+      description: "For established SaaS teams",
       features: [
-        "Unlimited accounts",
-        "Up to 25 competitors",
-        "Full intelligence suite",
-        "Real-time alerts",
-        "Custom integrations",
-        "Dedicated manager"
+        "Up to 10 competitors",
+        "Up to 7 pricing plans",
+        "20 analyses per month",
+        "Strategic AI pricing report",
+        "Priority competitor integration",
+        "CSV & Excel export",
+        "3 team seats included"
       ],
       isPopular: false
     }
@@ -125,7 +127,7 @@ const PricingSection = () => {
             Simple, transparent pricing
           </h2>
           <p className="text-xl text-slate-400 max-w-2xl mx-auto">
-            Choose the plan that fits your stage
+            Choose the plan that fits your stage. Scale as you grow.
           </p>
         </motion.div>
 
@@ -151,7 +153,7 @@ const PricingSection = () => {
           className="text-center"
         >
           <p className="text-slate-400">
-            All plans include 14-day free trial · No credit card required
+            All plans include a 14-day free trial. No credit card required to start.
           </p>
         </motion.div>
       </div>

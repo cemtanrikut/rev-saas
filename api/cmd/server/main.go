@@ -43,24 +43,34 @@ func main() {
 	userMetadataRepo := mongorepo.NewUserMetadataRepository(db)
 	planRepo := mongorepo.NewPlanRepository(db)
 	competitorRepo := mongorepo.NewCompetitorRepository(db)
+	analysisRepo := mongorepo.NewAnalysisRepository(db)
+	businessMetricsRepo := mongorepo.NewBusinessMetricsRepository(db)
 
 	// Initialize services
 	jwtService := service.NewJWTService(cfg.JWTSecret)
 	authService := service.NewAuthService(userRepo, companyRepo, userMetadataRepo, jwtService)
 	planService := service.NewPlanService(planRepo)
 	competitorService := service.NewCompetitorService(competitorRepo)
+	analysisService := service.NewAnalysisService(analysisRepo, planRepo, competitorRepo, businessMetricsRepo)
+	businessMetricsService := service.NewBusinessMetricsService(businessMetricsRepo)
+	limitsService := service.NewLimitsService(userRepo, planRepo, competitorRepo, analysisRepo)
+	aiPricingService := service.NewAIPricingService(cfg.OpenAIAPIKey)
 
 	// Initialize middleware
-	authMiddleware := middleware.NewAuthMiddleware(jwtService)
+	authMiddleware := middleware.NewAuthMiddleware(jwtService, userRepo)
 
 	// Initialize handlers
 	healthHandler := handler.NewHealthHandler()
 	authHandler := handler.NewAuthHandler(authService)
-	planHandler := handler.NewPlanHandler(planService)
-	competitorHandler := handler.NewCompetitorHandler(competitorService)
+	planHandler := handler.NewPlanHandler(planService, limitsService)
+	competitorHandler := handler.NewCompetitorHandler(competitorService, limitsService)
+	analysisHandler := handler.NewAnalysisHandler(analysisService, limitsService, aiPricingService)
+	analysisPDFHandler := handler.NewAnalysisPDFHandler(analysisService, businessMetricsRepo)
+	businessMetricsHandler := handler.NewBusinessMetricsHandler(businessMetricsService)
+	limitsHandler := handler.NewLimitsHandler(limitsService)
 
 	// Create router
-	r := router.NewRouter(healthHandler, authHandler, planHandler, competitorHandler, authMiddleware)
+	r := router.NewRouter(healthHandler, authHandler, planHandler, competitorHandler, analysisHandler, analysisPDFHandler, businessMetricsHandler, limitsHandler, authMiddleware)
 
 	// Configure HTTP server
 	srv := &http.Server{
