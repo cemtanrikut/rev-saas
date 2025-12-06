@@ -1,10 +1,18 @@
-import { createContext, useContext, useState, useMemo } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { analysisApi, LimitError } from '../lib/apiClient';
+import { useAuth } from './AuthContext';
 
 const AnalysisContext = createContext();
 
 export const AnalysisProvider = ({ children }) => {
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  
   const [analyses, setAnalyses] = useState([]);
   const [selectedAnalysisId, setSelectedAnalysisId] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isRunning, setIsRunning] = useState(false);
+  const [error, setError] = useState(null);
+  const [limitError, setLimitError] = useState(null); // Specific limit error state
 
   // Derived values
   const lastAnalysis = analyses.length > 0 ? analyses[0] : null;
@@ -14,126 +22,137 @@ export const AnalysisProvider = ({ children }) => {
     return analyses.find(a => a.id === selectedAnalysisId) || lastAnalysis;
   }, [analyses, selectedAnalysisId, lastAnalysis]);
 
-  const generateSuggestions = (plans, competitors) => {
-    return plans.map((plan, index) => {
-      // Base multiplier: 10% increase
-      // Add 2% for each plan tier (so higher plans get slightly more increase)
-      // Add 1% for each competitor (more competition = more pricing power)
-      const competitorBonus = Math.min(competitors.length * 0.01, 0.05); // cap at 5%
-      const tierBonus = index * 0.02; // 0%, 2%, 4%, etc.
-      const multiplier = 1.10 + tierBonus + competitorBonus;
-
-      const suggestedPrice = Math.round(plan.price * multiplier * 100) / 100; // round to 2 decimals
-
-      const changeAbsolute = suggestedPrice - plan.price;
-      const changePercent = (changeAbsolute / plan.price) * 100;
-
-      return {
-        planId: plan.id,
-        planName: plan.name,
-        planInterval: plan.interval,
-        currentPrice: plan.price,
-        suggestedPrice,
-        changeAbsolute,
-        changePercent
-      };
-    });
-  };
-
-  const buildSummary = (plans, competitors, suggestions) => {
-    if (!plans.length || !suggestions.length) {
-      return "We could not compute a meaningful analysis because there are no plans or suggestions.";
+  // Fetch analysis history from backend
+  const fetchHistory = useCallback(async () => {
+    if (!isAuthenticated) {
+      setAnalyses([]);
+      return;
     }
 
-    const numPlans = plans.length;
-    const numCompetitors = competitors.length;
+    setIsLoading(true);
+    setError(null);
 
-    const totalChangePercent = suggestions.reduce((sum, s) => sum + s.changePercent, 0);
-    const averageChangePercent = totalChangePercent / suggestions.length;
-
-    const maxChangePercent = Math.max(...suggestions.map(s => s.changePercent));
-
-    const sortedByPrice = [...plans].sort((a, b) => a.price - b.price);
-    const entryPlan = sortedByPrice[0];
-    const highestPlan = sortedByPrice[sortedByPrice.length - 1];
-
-    // Determine pricing position narrative
-    let pricingPosition;
-    if (averageChangePercent < 5) {
-      pricingPosition = "roughly in line with typical SaaS pricing norms";
-    } else if (averageChangePercent < 15) {
-      pricingPosition = "slightly underpriced compared to typical SaaS pricing norms";
-    } else {
-      pricingPosition = "materially underpriced for your category";
+    try {
+      const { data } = await analysisApi.list();
+      // Transform backend data - already sorted by created_at desc
+      const transformedAnalyses = (data || []).map(transformAnalysis);
+      setAnalyses(transformedAnalyses);
+      
+      // Select the first (latest) analysis if none selected
+      if (transformedAnalyses.length > 0 && !selectedAnalysisId) {
+        setSelectedAnalysisId(transformedAnalyses[0].id);
+      }
+    } catch (err) {
+      console.error('Failed to fetch analyses:', err);
+      setError(err.message || 'Failed to load analysis history');
+      setAnalyses([]);
+    } finally {
+      setIsLoading(false);
     }
+  }, [isAuthenticated, selectedAnalysisId]);
 
-    const competitorsText = numCompetitors === 0
-      ? "We did not use any explicit competitors for this analysis."
-      : `We used ${numCompetitors} competitor${numCompetitors > 1 ? "s" : ""} as a benchmark.`;
-
-    const entryPriceFormatted = new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2
-    }).format(entryPlan.price);
-
-    return [
-      `Your current pricing appears ${pricingPosition}. On average, we suggest a ${averageChangePercent.toFixed(1)}% uplift across your paid plans to move you closer to where similar SaaS products typically sit.`,
-      `Your entry plan ("${entryPlan.name}") is currently at ${entryPriceFormatted} and is likely the most sensitive to underpricing. Your top plan ("${highestPlan.name}") can usually sustain a stronger increase; in this analysis the highest recommended uplift on a single plan is ${maxChangePercent.toFixed(1)}%.`,
-      competitorsText + " These recommendations are not final prices, but a data-driven starting point for your next pricing iteration."
-    ].join(" ");
-  };
-
-  const runAnalysis = ({ plans, competitors }) => {
-    if (!plans || plans.length === 0) {
-      throw new Error('Cannot run analysis without plans');
+  // Fetch history when auth state changes
+  useEffect(() => {
+    if (!authLoading) {
+      fetchHistory();
     }
+  }, [authLoading, fetchHistory]);
 
-    if (!competitors || competitors.length === 0) {
-      throw new Error('Cannot run analysis without competitors');
-    }
+  // Transform backend analysis to frontend format
+  const transformAnalysis = (backendAnalysis) => {
+    const recommendations = backendAnalysis.recommendations || [];
+    
+    // Calculate stats from recommendations
+    const priceChanges = recommendations
+      .filter(r => r.current_price > 0 && r.suggested_new_price > 0)
+      .map(r => ((r.suggested_new_price - r.current_price) / r.current_price) * 100);
+    
+    const averageChangePercent = priceChanges.length > 0
+      ? priceChanges.reduce((sum, c) => sum + c, 0) / priceChanges.length
+      : 0;
+    const maxChangePercent = priceChanges.length > 0 ? Math.max(...priceChanges) : 0;
+    const minChangePercent = priceChanges.length > 0 ? Math.min(...priceChanges) : 0;
 
-    const suggestions = generateSuggestions(plans, competitors);
-    const summary = buildSummary(plans, competitors, suggestions);
-
-    // Calculate stats for insights
-    const totalChangePercent = suggestions.reduce((sum, s) => sum + s.changePercent, 0);
-    const averageChangePercent = totalChangePercent / suggestions.length;
-    const maxChangePercent = Math.max(...suggestions.map(s => s.changePercent));
-    const minChangePercent = Math.min(...suggestions.map(s => s.changePercent));
-
-    const newAnalysis = {
-      id: Date.now().toString(),
-      createdAt: new Date().toISOString(),
-      plans: plans.map(p => ({
-        id: p.id,
-        name: p.name,
-        price: p.price,
-        interval: p.interval,
-        description: p.description
+    return {
+      id: backendAnalysis.id,
+      createdAt: backendAnalysis.created_at,
+      summary: backendAnalysis.summary,
+      numPlans: backendAnalysis.num_plans,
+      numCompetitors: backendAnalysis.num_competitors,
+      recommendations: recommendations.map(r => ({
+        planId: r.plan_id,
+        planName: r.plan_name,
+        currentPrice: r.current_price,
+        suggestedPrice: r.suggested_new_price,
+        position: r.position,
+        suggestedAction: r.suggested_action,
+        rationale: r.rationale,
+        changeAbsolute: r.suggested_new_price - r.current_price,
+        changePercent: r.current_price > 0 
+          ? ((r.suggested_new_price - r.current_price) / r.current_price) * 100 
+          : 0
       })),
-      competitors: competitors.map(c => ({
-        id: c.id,
-        name: c.name,
-        url: c.url
-      })),
-      suggestions,
-      summary,
-      // Stats for insights
+      // Stats for UI compatibility
       stats: {
         averageChangePercent,
         maxChangePercent,
         minChangePercent,
-        numPlans: plans.length,
-        numCompetitors: competitors.length
+        numPlans: backendAnalysis.num_plans,
+        numCompetitors: backendAnalysis.num_competitors
       }
     };
+  };
 
-    setAnalyses(prev => [newAnalysis, ...prev]); // prepend to history
-    setSelectedAnalysisId(newAnalysis.id); // select the new analysis
+  // Run a new analysis via backend
+  const runAnalysis = async () => {
+    setIsRunning(true);
+    setError(null);
+    setLimitError(null);
 
-    return newAnalysis;
+    try {
+      const { data } = await analysisApi.run();
+      const transformedAnalysis = transformAnalysis(data);
+      
+      // Prepend to history
+      setAnalyses(prev => [transformedAnalysis, ...prev]);
+      setSelectedAnalysisId(transformedAnalysis.id);
+      
+      return { success: true, analysis: transformedAnalysis };
+    } catch (err) {
+      console.error('Failed to run analysis:', err);
+      
+      // Handle limit errors specifically
+      if (err instanceof LimitError) {
+        setLimitError({
+          errorCode: err.errorCode,
+          reason: err.reason,
+          plan: err.plan,
+          limit: err.limit,
+          current: err.current,
+        });
+        return { 
+          success: false, 
+          error: err.reason,
+          isLimitError: true,
+          limitError: {
+            errorCode: err.errorCode,
+            reason: err.reason,
+            plan: err.plan,
+            limit: err.limit,
+            current: err.current,
+          }
+        };
+      }
+      
+      setError(err.message || 'Failed to run analysis');
+      return { success: false, error: err.message };
+    } finally {
+      setIsRunning(false);
+    }
+  };
+
+  const clearLimitError = () => {
+    setLimitError(null);
   };
 
   const selectAnalysis = (id) => {
@@ -144,17 +163,21 @@ export const AnalysisProvider = ({ children }) => {
     setSelectedAnalysisId(null);
   };
 
-  const reset = () => {
-    setAnalyses([]);
-    setSelectedAnalysisId(null);
+  const clearError = () => {
+    setError(null);
   };
 
+  // Reset local state (for demo reset feature)
   const clearAnalyses = () => {
     setAnalyses([]);
     setSelectedAnalysisId(null);
   };
 
   const resetAnalyses = () => {
+    fetchHistory();
+  };
+
+  const reset = () => {
     setAnalyses([]);
     setSelectedAnalysisId(null);
   };
@@ -163,9 +186,16 @@ export const AnalysisProvider = ({ children }) => {
     analyses,
     lastAnalysis,
     selectedAnalysis,
+    isLoading,
+    isRunning,
+    error,
+    limitError,
     runAnalysis,
+    fetchHistory,
     selectAnalysis,
     clearAnalysis,
+    clearError,
+    clearLimitError,
     clearAnalyses,
     resetAnalyses,
     reset
@@ -185,4 +215,3 @@ export const useAnalysis = () => {
   }
   return context;
 };
-

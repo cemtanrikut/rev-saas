@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import AuthCard from '../components/AuthCard';
 
 const SignUp = () => {
   const navigate = useNavigate();
+  const { signup } = useAuth();
+  
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -16,6 +19,8 @@ const SignUp = () => {
   });
 
   const [errors, setErrors] = useState({});
+  const [apiError, setApiError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -26,6 +31,9 @@ const SignUp = () => {
     // Clear error when user starts typing
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
+    }
+    if (apiError) {
+      setApiError('');
     }
   };
 
@@ -45,8 +53,8 @@ const SignUp = () => {
 
     if (!formData.password) {
       newErrors.password = 'Password is required';
-    } else if (formData.password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters';
+    } else if (formData.password.length < 6) {
+      newErrors.password = 'Password must be at least 6 characters';
     }
 
     if (!formData.companyName.trim()) {
@@ -61,15 +69,31 @@ const SignUp = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setApiError('');
     
-    if (validateForm()) {
-      console.log('Sign up data:', formData);
-      // TODO: API call here
+    if (!validateForm()) {
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const result = await signup(formData);
       
-      // Redirect to onboarding
-      navigate('/onboarding');
+      if (result.success) {
+        // Redirect to login page with success message
+        navigate('/login', { 
+          state: { message: 'Account created successfully. Please sign in.' }
+        });
+      } else {
+        setApiError(result.error);
+      }
+    } catch (err) {
+      setApiError('An unexpected error occurred');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -94,6 +118,13 @@ const SignUp = () => {
           subtitle="Start using AI to design your SaaS pricing"
         >
             <form onSubmit={handleSubmit} className="space-y-6">
+              {/* API Error Message */}
+              {apiError && (
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30">
+                  <p className="text-sm text-red-400">{apiError}</p>
+                </div>
+              )}
+
               {/* Full Name */}
               <div>
                 <label 
@@ -108,9 +139,10 @@ const SignUp = () => {
                   type="text"
                   value={formData.fullName}
                   onChange={handleChange}
+                  disabled={isSubmitting}
                   className={`w-full px-4 py-3 rounded-xl bg-slate-900/50 border ${
                     errors.fullName ? 'border-red-500' : 'border-slate-700'
-                  } text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all`}
+                  } text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all disabled:opacity-50`}
                   placeholder="John Doe"
                 />
                 {errors.fullName && (
@@ -132,9 +164,10 @@ const SignUp = () => {
                   type="email"
                   value={formData.email}
                   onChange={handleChange}
+                  disabled={isSubmitting}
                   className={`w-full px-4 py-3 rounded-xl bg-slate-900/50 border ${
                     errors.email ? 'border-red-500' : 'border-slate-700'
-                  } text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all`}
+                  } text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all disabled:opacity-50`}
                   placeholder="you@company.com"
                 />
                 {errors.email && (
@@ -156,10 +189,11 @@ const SignUp = () => {
                   type="password"
                   value={formData.password}
                   onChange={handleChange}
+                  disabled={isSubmitting}
                   className={`w-full px-4 py-3 rounded-xl bg-slate-900/50 border ${
                     errors.password ? 'border-red-500' : 'border-slate-700'
-                  } text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all`}
-                  placeholder="Minimum 8 characters"
+                  } text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all disabled:opacity-50`}
+                  placeholder="Minimum 6 characters"
                 />
                 {errors.password && (
                   <p className="mt-1 text-sm text-red-400">{errors.password}</p>
@@ -182,9 +216,10 @@ const SignUp = () => {
                     type="text"
                     value={formData.companyName}
                     onChange={handleChange}
+                    disabled={isSubmitting}
                     className={`w-full px-4 py-3 rounded-xl bg-slate-900/50 border ${
                       errors.companyName ? 'border-red-500' : 'border-slate-700'
-                    } text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all`}
+                    } text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all disabled:opacity-50`}
                     placeholder="Acme Inc."
                   />
                   {errors.companyName && (
@@ -206,9 +241,10 @@ const SignUp = () => {
                     type="url"
                     value={formData.companyWebsite}
                     onChange={handleChange}
+                    disabled={isSubmitting}
                     className={`w-full px-4 py-3 rounded-xl bg-slate-900/50 border ${
                       errors.companyWebsite ? 'border-red-500' : 'border-slate-700'
-                    } text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all`}
+                    } text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all disabled:opacity-50`}
                     placeholder="acme.com"
                   />
                   {errors.companyWebsite && (
@@ -237,7 +273,8 @@ const SignUp = () => {
                       name="role"
                       value={formData.role}
                       onChange={handleChange}
-                      className="w-full px-4 py-3 pr-10 rounded-xl bg-slate-900/50 border border-slate-700 text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27rgb(148 163 184)%27 stroke-width=%272%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27%3e%3cpolyline points=%276 9 12 15 18 9%27%3e%3c/polyline%3e%3c/svg%3e')] bg-[length:1.25rem_1.25rem] bg-[position:right_0.75rem_center] bg-no-repeat"
+                      disabled={isSubmitting}
+                      className="w-full px-4 py-3 pr-10 rounded-xl bg-slate-900/50 border border-slate-700 text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27rgb(148 163 184)%27 stroke-width=%272%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27%3e%3cpolyline points=%276 9 12 15 18 9%27%3e%3c/polyline%3e%3c/svg%3e')] bg-[length:1.25rem_1.25rem] bg-[position:right_0.75rem_center] bg-no-repeat disabled:opacity-50"
                     >
                       <option value="">Select your role</option>
                       <option value="founder">Founder</option>
@@ -264,7 +301,8 @@ const SignUp = () => {
                         name="mrrRange"
                         value={formData.mrrRange}
                         onChange={handleChange}
-                        className="w-full px-4 py-3 pr-10 rounded-xl bg-slate-900/50 border border-slate-700 text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27rgb(148 163 184)%27 stroke-width=%272%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27%3e%3cpolyline points=%276 9 12 15 18 9%27%3e%3c/polyline%3e%3c/svg%3e')] bg-[length:1.25rem_1.25rem] bg-[position:right_0.75rem_center] bg-no-repeat"
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-3 pr-10 rounded-xl bg-slate-900/50 border border-slate-700 text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27rgb(148 163 184)%27 stroke-width=%272%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27%3e%3cpolyline points=%276 9 12 15 18 9%27%3e%3c/polyline%3e%3c/svg%3e')] bg-[length:1.25rem_1.25rem] bg-[position:right_0.75rem_center] bg-no-repeat disabled:opacity-50"
                       >
                         <option value="">Select range</option>
                         <option value="<1k">&lt;$1k</option>
@@ -288,7 +326,8 @@ const SignUp = () => {
                         name="heardFrom"
                         value={formData.heardFrom}
                         onChange={handleChange}
-                        className="w-full px-4 py-3 pr-10 rounded-xl bg-slate-900/50 border border-slate-700 text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27rgb(148 163 184)%27 stroke-width=%272%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27%3e%3cpolyline points=%276 9 12 15 18 9%27%3e%3c/polyline%3e%3c/svg%3e')] bg-[length:1.25rem_1.25rem] bg-[position:right_0.75rem_center] bg-no-repeat"
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-3 pr-10 rounded-xl bg-slate-900/50 border border-slate-700 text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27rgb(148 163 184)%27 stroke-width=%272%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27%3e%3cpolyline points=%276 9 12 15 18 9%27%3e%3c/polyline%3e%3c/svg%3e')] bg-[length:1.25rem_1.25rem] bg-[position:right_0.75rem_center] bg-no-repeat disabled:opacity-50"
                       >
                         <option value="">Select source</option>
                         <option value="linkedin">LinkedIn</option>
@@ -305,9 +344,20 @@ const SignUp = () => {
               {/* Submit Button */}
               <button
                 type="submit"
-                className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold py-3.5 rounded-xl hover:from-blue-600 hover:to-indigo-700 hover:scale-105 hover:shadow-xl hover:shadow-blue-500/30 transition-all duration-200"
+                disabled={isSubmitting}
+                className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold py-3.5 rounded-xl hover:from-blue-600 hover:to-indigo-700 hover:scale-105 hover:shadow-xl hover:shadow-blue-500/30 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
               >
-                Create Account
+                {isSubmitting ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Creating account...
+                  </span>
+                ) : (
+                  'Create Account'
+                )}
               </button>
 
               {/* Sign In Link */}
@@ -317,7 +367,8 @@ const SignUp = () => {
                   <button 
                     type="button"
                     onClick={handleSignInClick}
-                    className="font-semibold text-blue-400 hover:text-blue-300 transition-colors"
+                    disabled={isSubmitting}
+                    className="font-semibold text-blue-400 hover:text-blue-300 transition-colors disabled:opacity-50"
                   >
                     Sign in
                   </button>
@@ -338,4 +389,3 @@ const SignUp = () => {
 };
 
 export default SignUp;
-

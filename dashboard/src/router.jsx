@@ -1,8 +1,11 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
 import { CompetitorsProvider } from './context/CompetitorsContext';
 import { PlansProvider } from './context/PlansContext';
 import { AnalysisProvider } from './context/AnalysisContext';
 import { SettingsProvider } from './context/SettingsContext';
+import { BusinessMetricsProvider } from './context/BusinessMetricsContext';
+import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
 import SignUp from './pages/SignUp';
 import OnboardingLayout from './pages/onboarding/OnboardingLayout';
@@ -15,38 +18,62 @@ import Reports from './pages/dashboard/Reports';
 import Settings from './pages/dashboard/Settings';
 import Billing from './pages/dashboard/Billing';
 
-const DashboardWithProvider = () => (
+// Wrapper component to provide all contexts for dashboard
+const DashboardWithProviders = () => (
   <CompetitorsProvider>
     <PlansProvider>
       <AnalysisProvider>
         <SettingsProvider>
-          <DashboardLayout />
+          <BusinessMetricsProvider>
+            <DashboardLayout />
+          </BusinessMetricsProvider>
         </SettingsProvider>
       </AnalysisProvider>
     </PlansProvider>
   </CompetitorsProvider>
 );
 
+// Protected dashboard wrapper
+const ProtectedDashboard = () => (
+  <ProtectedRoute>
+    <DashboardWithProviders />
+  </ProtectedRoute>
+);
+
+// Root layout with AuthProvider
+const RootLayout = ({ children }) => (
+  <AuthProvider>
+    {children}
+  </AuthProvider>
+);
+
+// Create routes with auth wrapper
 export const router = createBrowserRouter([
   {
     path: '/',
-    element: <Navigate to="/login" replace />
+    element: <RootLayout><Navigate to="/login" replace /></RootLayout>
   },
   {
     path: '/login',
-    element: <Login />
+    element: <RootLayout><Login /></RootLayout>
   },
   {
     path: '/signup',
-    element: <SignUp />
+    element: <RootLayout><SignUp /></RootLayout>
   },
   {
     path: '/onboarding',
-    element: <OnboardingLayout />
+    element: (
+      <RootLayout>
+        <ProtectedRoute>
+          <OnboardingLayout />
+        </ProtectedRoute>
+      </RootLayout>
+    )
   },
   {
     path: '/app',
-    element: <DashboardWithProvider />,
+    element: <RootLayout><ProtectedDashboard /></RootLayout>,
     children: [
       {
         index: true,
@@ -83,5 +110,3 @@ export const router = createBrowserRouter([
     ]
   }
 ]);
-
-

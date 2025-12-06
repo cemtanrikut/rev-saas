@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { usePlans } from '../../context/PlansContext';
 
 const Plans = () => {
-  const { plans, addPlan, removePlan } = usePlans();
+  const { plans, addPlan, removePlan, isLoading, error, clearError } = usePlans();
   
   const [formData, setFormData] = useState({
     name: '',
@@ -11,6 +11,8 @@ const Plans = () => {
     description: ''
   });
   const [errors, setErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [removingId, setRemovingId] = useState(null);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -21,6 +23,10 @@ const Plans = () => {
     // Clear error for this field
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
+    }
+    // Clear API error when user starts typing
+    if (error) {
+      clearError();
     }
   };
 
@@ -33,8 +39,8 @@ const Plans = () => {
 
     if (!formData.price) {
       newErrors.price = 'Price is required';
-    } else if (isNaN(formData.price) || Number(formData.price) <= 0) {
-      newErrors.price = 'Price must be a positive number';
+    } else if (isNaN(formData.price) || Number(formData.price) < 0) {
+      newErrors.price = 'Price must be a non-negative number';
     }
 
     if (!formData.interval) {
@@ -45,35 +51,44 @@ const Plans = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
     if (!validate()) {
       return;
     }
 
-    // Add plan
-    addPlan({
+    setIsSubmitting(true);
+
+    const result = await addPlan({
       name: formData.name.trim(),
       price: formData.price,
       interval: formData.interval,
       description: formData.description.trim()
     });
 
-    // Reset form
-    setFormData({
-      name: '',
-      price: '',
-      interval: 'monthly',
-      description: ''
-    });
-    setErrors({});
+    setIsSubmitting(false);
+
+    if (result.success) {
+      // Reset form
+      setFormData({
+        name: '',
+        price: '',
+        interval: 'monthly',
+        description: ''
+      });
+      setErrors({});
+    }
   };
 
-  const handleRemove = (id) => {
-    if (confirm('Are you sure you want to remove this plan?')) {
-      removePlan(id);
+  const handleRemove = async (id) => {
+    if (!confirm('Are you sure you want to remove this plan?')) {
+      return;
     }
+
+    setRemovingId(id);
+    await removePlan(id);
+    setRemovingId(null);
   };
 
   const formatPrice = (price, interval) => {
@@ -99,6 +114,21 @@ const Plans = () => {
         </p>
       </div>
 
+      {/* API Error Banner */}
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-center justify-between">
+          <p className="text-red-400">{error}</p>
+          <button 
+            onClick={clearError}
+            className="text-red-400 hover:text-red-300 p-1"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       {/* Add Plan Form */}
       <div className="bg-slate-900/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-800">
         <h3 className="text-lg font-semibold text-white mb-4">
@@ -118,9 +148,10 @@ const Plans = () => {
                 type="text"
                 value={formData.name}
                 onChange={handleChange}
+                disabled={isSubmitting}
                 className={`w-full px-4 py-3 rounded-xl bg-slate-900/50 border ${
                   errors.name ? 'border-red-500' : 'border-slate-700'
-                } text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all`}
+                } text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all disabled:opacity-50`}
                 placeholder="e.g., Starter, Pro, Business"
               />
               {errors.name && (
@@ -141,9 +172,10 @@ const Plans = () => {
                 min="0"
                 value={formData.price}
                 onChange={handleChange}
+                disabled={isSubmitting}
                 className={`w-full px-4 py-3 rounded-xl bg-slate-900/50 border ${
                   errors.price ? 'border-red-500' : 'border-slate-700'
-                } text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all`}
+                } text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all disabled:opacity-50`}
                 placeholder="29.99"
               />
               {errors.price && (
@@ -163,7 +195,8 @@ const Plans = () => {
                 name="interval"
                 value={formData.interval}
                 onChange={handleChange}
-                className="w-full px-4 py-3 rounded-xl bg-slate-900/50 border border-slate-700 text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all appearance-none pr-10"
+                disabled={isSubmitting}
+                className="w-full px-4 py-3 rounded-xl bg-slate-900/50 border border-slate-700 text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all appearance-none pr-10 disabled:opacity-50"
                 style={{
                   backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23cbd5e1'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
                   backgroundRepeat: 'no-repeat',
@@ -187,7 +220,8 @@ const Plans = () => {
                 type="text"
                 value={formData.description}
                 onChange={handleChange}
-                className="w-full px-4 py-3 rounded-xl bg-slate-900/50 border border-slate-700 text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+                disabled={isSubmitting}
+                className="w-full px-4 py-3 rounded-xl bg-slate-900/50 border border-slate-700 text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all disabled:opacity-50"
                 placeholder="Brief description of what's included"
               />
             </div>
@@ -195,9 +229,20 @@ const Plans = () => {
 
           <button
             type="submit"
-            className="px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl font-semibold hover:from-blue-600 hover:to-indigo-700 hover:scale-105 transition-all shadow-lg shadow-blue-500/20"
+            disabled={isSubmitting}
+            className="px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl font-semibold hover:from-blue-600 hover:to-indigo-700 hover:scale-105 transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
           >
-            Add Plan
+            {isSubmitting ? (
+              <span className="flex items-center gap-2">
+                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                Adding...
+              </span>
+            ) : (
+              'Add Plan'
+            )}
           </button>
         </form>
       </div>
@@ -210,7 +255,13 @@ const Plans = () => {
           </h3>
         </div>
 
-        {plans.length === 0 ? (
+        {isLoading ? (
+          /* Loading State */
+          <div className="p-12 text-center">
+            <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-slate-400">Loading plans...</p>
+          </div>
+        ) : plans.length === 0 ? (
           /* Empty State */
           <div className="p-12 text-center">
             <div className="w-16 h-16 bg-slate-800 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -231,7 +282,9 @@ const Plans = () => {
             {plans.map((plan) => (
               <div
                 key={plan.id}
-                className="bg-slate-800/30 rounded-xl p-6 border border-slate-700 hover:border-slate-600 transition-all group"
+                className={`bg-slate-800/30 rounded-xl p-6 border border-slate-700 hover:border-slate-600 transition-all group ${
+                  removingId === plan.id ? 'opacity-50' : ''
+                }`}
               >
                 <div className="flex items-start justify-between mb-4">
                   <div>
@@ -244,12 +297,20 @@ const Plans = () => {
                   </div>
                   <button
                     onClick={() => handleRemove(plan.id)}
-                    className="opacity-0 group-hover:opacity-100 p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+                    disabled={removingId === plan.id}
+                    className="opacity-0 group-hover:opacity-100 p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all disabled:opacity-50"
                     title="Remove plan"
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
+                    {removingId === plan.id ? (
+                      <svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    )}
                   </button>
                 </div>
 
@@ -268,5 +329,3 @@ const Plans = () => {
 };
 
 export default Plans;
-
-
