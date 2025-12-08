@@ -1,105 +1,82 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ProgressIndicator from '../../components/onboarding/ProgressIndicator';
-import Step1Company from './Step1Company';
-import Step2PricingContext from './Step2PricingContext';
-import Step3Competitors from './Step3Competitors';
-import Step4Stripe from './Step4Stripe';
+import Step1Plans from './Step1Plans';
+import Step2Competitors from './Step2Competitors';
+import Step3BusinessMetrics from './Step3BusinessMetrics';
+import Step4Review from './Step4Review';
+import { postJson, businessMetricsApi } from '../../lib/apiClient';
+
+const STEP_LABELS = [
+  'Pricing Plans',
+  'Competitors',
+  'Business Metrics',
+  'Review',
+];
 
 const OnboardingLayout = () => {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(1);
-  const [onboardingData, setOnboardingData] = useState({
-    company: {
-      companyName: '',
-      website: '',
-      country: '',
-      teamSize: '',
-      productCategory: ''
-    },
-    pricingContext: {
-      planCount: '',
-      mainPricingConcern: '',
-      pricingNotes: ''
-    },
-    competitors: {
-      competitor1: '',
-      competitor2: '',
-      competitor3: ''
-    },
-    stripe: {
-      willConnectStripe: false
-    }
+  const [isLoading, setIsLoading] = useState(false);
+  
+  // Onboarding data state
+  const [plans, setPlans] = useState([]);
+  const [competitors, setCompetitors] = useState([]);
+  const [businessMetrics, setBusinessMetrics] = useState({
+    currency: 'USD',
+    mrr: '',
+    monthlyChurnRate: '',
+    pricingGoal: '',
+    targetArrGrowth: '',
   });
 
   const totalSteps = 4;
 
-  const updateCompany = (updated) => {
-    setOnboardingData(prev => ({
-      ...prev,
-      company: { ...prev.company, ...updated }
-    }));
-  };
-
-  const updatePricingContext = (updated) => {
-    setOnboardingData(prev => ({
-      ...prev,
-      pricingContext: { ...prev.pricingContext, ...updated }
-    }));
-  };
-
-  const updateCompetitors = (updated) => {
-    setOnboardingData(prev => ({
-      ...prev,
-      competitors: { ...prev.competitors, ...updated }
-    }));
-  };
-
-  const updateStripe = (updated) => {
-    setOnboardingData(prev => ({
-      ...prev,
-      stripe: { ...prev.stripe, ...updated }
-    }));
+  const updateBusinessMetrics = (updated) => {
+    setBusinessMetrics((prev) => ({ ...prev, ...updated }));
   };
 
   const validateStep = (step) => {
     switch (step) {
       case 1:
-        const { companyName, website, country, teamSize, productCategory } = onboardingData.company;
-        if (!companyName || !website || !country || !teamSize || !productCategory) {
-          return false;
+        // At least one plan is required
+        if (plans.length === 0) {
+          return { valid: false, message: 'Please add at least one pricing plan.' };
         }
-        if (!website.startsWith('http://') && !website.startsWith('https://')) {
-          alert('Website must start with http:// or https://');
-          return false;
-        }
-        return true;
-      
+        return { valid: true };
+
       case 2:
-        const { planCount, mainPricingConcern } = onboardingData.pricingContext;
-        if (!planCount || !mainPricingConcern) {
-          return false;
-        }
-        return true;
-      
+        // Competitors are optional
+        return { valid: true };
+
       case 3:
-        // All competitors are optional
-        return true;
-      
+        // MRR, Churn, and Pricing Goal are required
+        if (businessMetrics.mrr === '' || businessMetrics.mrr === null) {
+          return { valid: false, message: 'Please enter your MRR.' };
+        }
+        if (businessMetrics.monthlyChurnRate === '' || businessMetrics.monthlyChurnRate === null) {
+          return { valid: false, message: 'Please enter your monthly churn rate.' };
+        }
+        if (!businessMetrics.pricingGoal) {
+          return { valid: false, message: 'Please select your pricing goal.' };
+        }
+        return { valid: true };
+
       case 4:
-        return true;
-      
+        return { valid: true };
+
       default:
-        return true;
+        return { valid: true };
     }
   };
 
   const handleNext = () => {
-    if (!validateStep(currentStep)) {
-      alert('Please fill in all required fields.');
+    const validation = validateStep(currentStep);
+    if (!validation.valid) {
+      alert(validation.message);
       return;
     }
-    
+
     if (currentStep < totalSteps) {
       setCurrentStep(currentStep + 1);
     }
@@ -111,51 +88,98 @@ const OnboardingLayout = () => {
     }
   };
 
-  const handleFinish = () => {
-    // Validate all steps
+  const handleSkip = () => {
+    // Only Step 2 (Competitors) can be skipped
+    if (currentStep === 2) {
+      setCurrentStep(currentStep + 1);
+    }
+  };
+
+  const handleFinish = async () => {
+    // Validate all required steps
     for (let step = 1; step <= 3; step++) {
-      if (!validateStep(step)) {
-        alert(`Please complete all required fields in Step ${step}.`);
+      const validation = validateStep(step);
+      if (!validation.valid) {
+        alert(`Step ${step}: ${validation.message}`);
         setCurrentStep(step);
         return;
       }
     }
 
-    console.log('Onboarding data:', onboardingData);
-    // TODO: Send to backend
-    
-    // Redirect to dashboard
-    navigate('/app/overview');
+    setIsLoading(true);
+
+    try {
+      // 1. Save Plans
+      for (const plan of plans) {
+        await postJson('/api/plans', {
+          name: plan.name,
+          price: plan.price,
+          currency: plan.currency,
+          billing_cycle: plan.billingCycle,
+        });
+      }
+
+      // 2. Save Competitors (if any)
+      for (const comp of competitors) {
+        // Convert plans to backend format
+        const competitorPlans = comp.plans.map((p) => ({
+          name: p.name,
+          price: p.price,
+          currency: p.currency,
+          billing_cycle: p.billingCycle,
+        }));
+
+        await postJson('/api/competitors', {
+          name: comp.name,
+          url: comp.url || '',
+          plans: competitorPlans,
+        });
+      }
+
+      // 3. Save Business Metrics
+      const metricsPayload = {
+        currency: businessMetrics.currency,
+        mrr: parseFloat(businessMetrics.mrr) || 0,
+        monthly_churn_rate: parseFloat(businessMetrics.monthlyChurnRate) || 0,
+        pricing_goal: businessMetrics.pricingGoal,
+      };
+      
+      // Only include targetArrGrowth if it's set
+      if (businessMetrics.targetArrGrowth !== '' && businessMetrics.targetArrGrowth !== null) {
+        metricsPayload.target_arr_growth = parseFloat(businessMetrics.targetArrGrowth);
+      }
+
+      await businessMetricsApi.set(metricsPayload);
+
+      // 4. Run first analysis
+      await postJson('/api/analysis/run', {});
+
+      // Navigate to dashboard
+      navigate('/app/analyses');
+    } catch (error) {
+      console.error('Onboarding error:', error);
+      alert('An error occurred while saving your data. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const renderStep = () => {
     switch (currentStep) {
       case 1:
-        return (
-          <Step1Company
-            data={onboardingData.company}
-            onChange={updateCompany}
-          />
-        );
+        return <Step1Plans data={plans} onChange={setPlans} />;
       case 2:
-        return (
-          <Step2PricingContext
-            data={onboardingData.pricingContext}
-            onChange={updatePricingContext}
-          />
-        );
+        return <Step2Competitors data={competitors} onChange={setCompetitors} />;
       case 3:
-        return (
-          <Step3Competitors
-            data={onboardingData.competitors}
-            onChange={updateCompetitors}
-          />
-        );
+        return <Step3BusinessMetrics data={businessMetrics} onChange={updateBusinessMetrics} />;
       case 4:
         return (
-          <Step4Stripe
-            data={onboardingData.stripe}
-            onChange={updateStripe}
+          <Step4Review
+            plans={plans}
+            competitors={competitors}
+            businessMetrics={businessMetrics}
+            onGenerate={handleFinish}
+            isLoading={isLoading}
           />
         );
       default:
@@ -168,15 +192,15 @@ const OnboardingLayout = () => {
       <div className="w-full max-w-3xl">
         {/* Logo */}
         <div className="flex justify-center mb-8 animate-fadeIn">
-          <img 
-            src="/revalyze-logo.png" 
-            alt="Revalyze" 
-            className="h-14 w-auto"
-          />
+          <img src="/revalyze-logo.png" alt="Revalyze" className="h-14 w-auto" />
         </div>
 
         {/* Progress Indicator */}
-        <ProgressIndicator currentStep={currentStep} totalSteps={totalSteps} />
+        <ProgressIndicator
+          currentStep={currentStep}
+          totalSteps={totalSteps}
+          stepLabels={STEP_LABELS}
+        />
 
         {/* Step Content */}
         <div className="bg-slate-800/50 backdrop-blur-sm rounded-3xl shadow-2xl p-10 border border-slate-700 mb-8">
@@ -184,41 +208,56 @@ const OnboardingLayout = () => {
         </div>
 
         {/* Navigation Buttons */}
-        <div className="flex justify-between items-center">
-          <button
-            onClick={handleBack}
-            disabled={currentStep === 1}
-            className={`px-6 py-3 rounded-xl font-semibold transition-all ${
-              currentStep === 1
-                ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                : 'bg-slate-700 text-white hover:bg-slate-600 hover:scale-105'
-            }`}
-          >
-            Back
-          </button>
+        {currentStep < totalSteps && (
+          <div className="flex justify-between items-center">
+            <button
+              onClick={handleBack}
+              disabled={currentStep === 1}
+              className={`px-6 py-3 rounded-xl font-semibold transition-all ${
+                currentStep === 1
+                  ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                  : 'bg-slate-700 text-white hover:bg-slate-600 hover:scale-105'
+              }`}
+            >
+              Back
+            </button>
 
-          {currentStep < totalSteps ? (
+            <div className="flex items-center gap-3">
+              {/* Skip button only on Step 2 */}
+              {currentStep === 2 && (
+                <button
+                  onClick={handleSkip}
+                  className="px-6 py-3 text-slate-400 hover:text-white transition-colors font-medium"
+                >
+                  Skip this step
+                </button>
+              )}
+
+              <button
+                onClick={handleNext}
+                className="px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl font-semibold hover:from-blue-600 hover:to-indigo-700 hover:scale-105 hover:shadow-xl hover:shadow-blue-500/30 transition-all"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Back button only on Step 4 */}
+        {currentStep === totalSteps && (
+          <div className="flex justify-start">
             <button
-              onClick={handleNext}
-              className="px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl font-semibold hover:from-blue-600 hover:to-indigo-700 hover:scale-105 hover:shadow-xl hover:shadow-blue-500/30 transition-all"
+              onClick={handleBack}
+              className="px-6 py-3 rounded-xl font-semibold bg-slate-700 text-white hover:bg-slate-600 hover:scale-105 transition-all"
             >
-              Next
+              Back
             </button>
-          ) : (
-            <button
-              onClick={handleFinish}
-              className="px-8 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl font-semibold hover:from-blue-600 hover:to-indigo-700 hover:scale-105 hover:shadow-xl hover:shadow-blue-500/30 transition-all"
-            >
-              Finish onboarding
-            </button>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Footer */}
         <div className="mt-8 text-center">
-          <p className="text-slate-400 text-sm">
-            © {new Date().getFullYear()} Revalyze B.V.
-          </p>
+          <p className="text-slate-400 text-sm">© {new Date().getFullYear()} Revalyze B.V.</p>
         </div>
       </div>
     </div>
@@ -226,4 +265,3 @@ const OnboardingLayout = () => {
 };
 
 export default OnboardingLayout;
-

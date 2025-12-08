@@ -29,17 +29,26 @@ func NewCompetitorService(repo *mongorepo.CompetitorRepository) *CompetitorServi
 	}
 }
 
+// CompetitorPlanInput represents input for a competitor's plan.
+type CompetitorPlanInput struct {
+	Name         string  `json:"name"`
+	Price        float64 `json:"price"`
+	Currency     string  `json:"currency"`
+	BillingCycle string  `json:"billing_cycle"`
+}
+
+// CompetitorInput represents input for creating a competitor.
+type CompetitorInput struct {
+	Name  string                `json:"name"`
+	URL   string                `json:"url"`
+	Plans []CompetitorPlanInput `json:"plans"`
+}
+
 // CreateCompetitor creates a new competitor for a user.
-func (s *CompetitorService) CreateCompetitor(ctx context.Context, userID, name, url string, basePrice float64) (*model.Competitor, error) {
-	name = strings.TrimSpace(name)
+func (s *CompetitorService) CreateCompetitor(ctx context.Context, userID string, input CompetitorInput) (*model.Competitor, error) {
+	name := strings.TrimSpace(input.Name)
 	if name == "" {
 		return nil, errors.New("competitor name is required")
-	}
-
-	url = strings.TrimSpace(url)
-
-	if basePrice < 0 {
-		return nil, errors.New("base price must be non-negative")
 	}
 
 	uid, err := primitive.ObjectIDFromHex(userID)
@@ -47,11 +56,41 @@ func (s *CompetitorService) CreateCompetitor(ctx context.Context, userID, name, 
 		return nil, errors.New("invalid user id")
 	}
 
+	// Convert plan inputs to model plans
+	plans := make([]model.CompetitorPlan, 0, len(input.Plans))
+	for _, p := range input.Plans {
+		planName := strings.TrimSpace(p.Name)
+		if planName == "" {
+			planName = "Default"
+		}
+
+		currency := strings.TrimSpace(p.Currency)
+		if currency == "" {
+			currency = "USD"
+		}
+
+		billingCycle := strings.TrimSpace(p.BillingCycle)
+		if billingCycle == "" {
+			billingCycle = "monthly"
+		}
+
+		if p.Price < 0 {
+			return nil, errors.New("plan price must be non-negative")
+		}
+
+		plans = append(plans, model.CompetitorPlan{
+			Name:         planName,
+			Price:        p.Price,
+			Currency:     currency,
+			BillingCycle: billingCycle,
+		})
+	}
+
 	competitor := &model.Competitor{
-		UserID:    uid,
-		Name:      name,
-		URL:       url,
-		BasePrice: basePrice,
+		UserID: uid,
+		Name:   name,
+		URL:    strings.TrimSpace(input.URL),
+		Plans:  plans,
 	}
 
 	if err := s.repo.Create(ctx, competitor); err != nil {
@@ -93,4 +132,3 @@ func (s *CompetitorService) DeleteCompetitor(ctx context.Context, userID, compet
 
 	return nil
 }
-

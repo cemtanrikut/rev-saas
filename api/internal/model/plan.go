@@ -8,10 +8,13 @@ import (
 
 // Plan represents a pricing plan belonging to a user.
 type Plan struct {
-	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
-	UserID    primitive.ObjectID `bson:"user_id" json:"user_id"`
-	Name      string             `bson:"name" json:"name"`
-	Price     float64            `bson:"price" json:"price"`
-	CreatedAt time.Time          `bson:"created_at" json:"created_at"`
+	ID           primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	UserID       primitive.ObjectID `bson:"user_id" json:"user_id"`
+	Name         string             `bson:"name" json:"name"`
+	Price        float64            `bson:"price" json:"price"`
+	Currency     string             `bson:"currency,omitempty" json:"currency,omitempty"`
+	BillingCycle string             `bson:"billing_cycle,omitempty" json:"billing_cycle,omitempty"`
+	CreatedAt    time.Time          `bson:"created_at" json:"created_at"`
 }
+
 

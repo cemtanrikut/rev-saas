@@ -26,8 +26,10 @@ func NewPlanHandler(service *service.PlanService, limitsService *service.LimitsS
 }
 
 type createPlanRequest struct {
-	Name  string  `json:"name"`
-	Price float64 `json:"price"`
+	Name         string  `json:"name"`
+	Price        float64 `json:"price"`
+	Currency     string  `json:"currency"`
+	BillingCycle string  `json:"billing_cycle"`
 }
 
 // Create handles plan creation.
@@ -66,7 +68,12 @@ func (h *PlanHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	plan, err := h.service.CreatePlan(r.Context(), userID, req.Name, req.Price)
+	plan, err := h.service.CreatePlan(r.Context(), userID, service.PlanInput{
+		Name:         req.Name,
+		Price:        req.Price,
+		Currency:     req.Currency,
+		BillingCycle: req.BillingCycle,
+	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

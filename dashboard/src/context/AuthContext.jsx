@@ -60,11 +60,20 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   // Signup function - accepts full signup data object
+  // Now auto-logs in the user by saving the returned token
   const signup = useCallback(async (signupData) => {
     setError(null);
     
     try {
       const { data } = await authApi.signup(signupData);
+      
+      // Auto-login: save token and user
+      if (data.token) {
+        setToken(data.token);
+        setTokenState(data.token);
+        setUser(data.user);
+      }
+      
       return { success: true, user: data.user, company: data.company };
     } catch (err) {
       const errorMessage = err.message || 'Signup failed';

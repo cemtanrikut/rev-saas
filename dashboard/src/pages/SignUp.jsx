@@ -83,10 +83,8 @@ const SignUp = () => {
       const result = await signup(formData);
       
       if (result.success) {
-        // Redirect to login page with success message
-        navigate('/login', { 
-          state: { message: 'Account created successfully. Please sign in.' }
-        });
+        // Redirect to onboarding flow (user is auto-logged in)
+        navigate('/onboarding');
       } else {
         setApiError(result.error);
       }
