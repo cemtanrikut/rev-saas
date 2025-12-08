@@ -159,14 +159,15 @@ export const authApi = {
 // Plans API calls
 export const plansApi = {
   list: () => getJson('/api/plans'),
-  create: (name, price) => postJson('/api/plans', { name, price }),
+  create: (name, price, currency = 'USD', billingCycle = 'monthly') => 
+    postJson('/api/plans', { name, price, currency, billing_cycle: billingCycle }),
   delete: (id) => deleteJson(`/api/plans/${id}`),
 };
 
 // Competitors API calls
 export const competitorsApi = {
   list: () => getJson('/api/competitors'),
-  create: (name, url, basePrice) => postJson('/api/competitors', { name, url, base_price: basePrice }),
+  create: (name, url, plans) => postJson('/api/competitors', { name, url, plans }),
   delete: (id) => deleteJson(`/api/competitors/${id}`),
 };
 

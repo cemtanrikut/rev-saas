@@ -279,10 +279,20 @@ func (s *AIPricingService) buildUserPrompt(user *model.User, input AIPricingInpu
 	if len(input.Competitors) > 0 {
 		validCompetitors := make([]map[string]interface{}, 0)
 		for _, c := range input.Competitors {
-			if c.BasePrice > 0 {
+			// Now competitors have multiple plans
+			competitorPlans := make([]map[string]interface{}, 0)
+			for _, p := range c.Plans {
+				if p.Price > 0 {
+					competitorPlans = append(competitorPlans, map[string]interface{}{
+						"name":  p.Name,
+						"price": p.Price,
+					})
+				}
+			}
+			if len(competitorPlans) > 0 {
 				validCompetitors = append(validCompetitors, map[string]interface{}{
-					"name":      c.Name,
-					"basePrice": c.BasePrice,
+					"name":  c.Name,
+					"plans": competitorPlans,
 				})
 			}
 		}

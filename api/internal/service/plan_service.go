@@ -29,13 +29,21 @@ func NewPlanService(repo *mongorepo.PlanRepository) *PlanService {
 	}
 }
 
+// PlanInput represents input for creating a plan.
+type PlanInput struct {
+	Name         string
+	Price        float64
+	Currency     string
+	BillingCycle string
+}
+
 // CreatePlan creates a new plan for a user.
-func (s *PlanService) CreatePlan(ctx context.Context, userID string, name string, price float64) (*model.Plan, error) {
-	name = strings.TrimSpace(name)
+func (s *PlanService) CreatePlan(ctx context.Context, userID string, input PlanInput) (*model.Plan, error) {
+	name := strings.TrimSpace(input.Name)
 	if name == "" {
 		return nil, errors.New("plan name is required")
 	}
-	if price < 0 {
+	if input.Price < 0 {
 		return nil, errors.New("price must be non-negative")
 	}
 
@@ -44,10 +52,24 @@ func (s *PlanService) CreatePlan(ctx context.Context, userID string, name string
 		return nil, errors.New("invalid user id")
 	}
 
+	// Default currency
+	currency := strings.TrimSpace(input.Currency)
+	if currency == "" {
+		currency = "USD"
+	}
+
+	// Default billing cycle
+	billingCycle := strings.TrimSpace(input.BillingCycle)
+	if billingCycle == "" {
+		billingCycle = "monthly"
+	}
+
 	plan := &model.Plan{
-		UserID: uid,
-		Name:   name,
-		Price:  price,
+		UserID:       uid,
+		Name:         name,
+		Price:        input.Price,
+		Currency:     currency,
+		BillingCycle: billingCycle,
 	}
 
 	if err := s.repo.Create(ctx, plan); err != nil {
@@ -89,4 +111,5 @@ func (s *PlanService) DeletePlan(ctx context.Context, userID string, planID stri
 
 	return nil
 }
+
 

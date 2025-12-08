@@ -25,10 +25,17 @@ func NewCompetitorHandler(service *service.CompetitorService, limitsService *ser
 	}
 }
 
+type competitorPlanRequest struct {
+	Name         string  `json:"name"`
+	Price        float64 `json:"price"`
+	Currency     string  `json:"currency"`
+	BillingCycle string  `json:"billing_cycle"`
+}
+
 type createCompetitorRequest struct {
-	Name      string  `json:"name"`
-	URL       string  `json:"url"`
-	BasePrice float64 `json:"base_price"`
+	Name  string                  `json:"name"`
+	URL   string                  `json:"url"`
+	Plans []competitorPlanRequest `json:"plans"`
 }
 
 type limitErrorResponse struct {
@@ -75,7 +82,22 @@ func (h *CompetitorHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	competitor, err := h.service.CreateCompetitor(r.Context(), userID, req.Name, req.URL, req.BasePrice)
+	// Convert request plans to service input
+	planInputs := make([]service.CompetitorPlanInput, 0, len(req.Plans))
+	for _, p := range req.Plans {
+		planInputs = append(planInputs, service.CompetitorPlanInput{
+			Name:         p.Name,
+			Price:        p.Price,
+			Currency:     p.Currency,
+			BillingCycle: p.BillingCycle,
+		})
+	}
+
+	competitor, err := h.service.CreateCompetitor(r.Context(), userID, service.CompetitorInput{
+		Name:  req.Name,
+		URL:   req.URL,
+		Plans: planInputs,
+	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -137,4 +159,3 @@ func (h *CompetitorHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusNoContent)
 }
-

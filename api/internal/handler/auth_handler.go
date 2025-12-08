@@ -55,6 +55,7 @@ type authUserResponse struct {
 }
 
 type signupResponse struct {
+	Token   string           `json:"token"`
 	User    authUserResponse `json:"user"`
 	Company *companyResponse `json:"company,omitempty"`
 }
@@ -108,7 +109,15 @@ func (h *AuthHandler) Signup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Generate token for auto-login after signup
+	token, err := h.auth.GenerateTokenForUser(result.User.ID.Hex())
+	if err != nil {
+		writeJSONError(w, "failed to generate auth token", http.StatusInternalServerError)
+		return
+	}
+
 	resp := signupResponse{
+		Token: token,
 		User: authUserResponse{
 			ID:        result.User.ID.Hex(),
 			Email:     result.User.Email,

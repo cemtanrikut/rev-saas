@@ -12,10 +12,12 @@ import (
 
 // MetricsInput represents the input for setting business metrics.
 type MetricsInput struct {
-	Currency         string  `json:"currency"`
-	MRR              float64 `json:"mrr"`
-	Customers        int     `json:"customers"`
-	MonthlyChurnRate float64 `json:"monthly_churn_rate"`
+	Currency         string   `json:"currency"`
+	MRR              float64  `json:"mrr"`
+	Customers        int      `json:"customers"`
+	MonthlyChurnRate float64  `json:"monthly_churn_rate"`
+	PricingGoal      string   `json:"pricing_goal"`
+	TargetArrGrowth  *float64 `json:"target_arr_growth"` // nullable/optional
 }
 
 // BusinessMetricsService handles business logic for business metrics.
@@ -70,6 +72,8 @@ func (s *BusinessMetricsService) SetMetrics(ctx context.Context, userID string, 
 		MRR:              input.MRR,
 		Customers:        input.Customers,
 		MonthlyChurnRate: input.MonthlyChurnRate,
+		PricingGoal:      input.PricingGoal,
+		TargetArrGrowth:  input.TargetArrGrowth,
 	}
 
 	if err := s.repo.UpsertForUser(ctx, metrics); err != nil {
@@ -78,4 +82,5 @@ func (s *BusinessMetricsService) SetMetrics(ctx context.Context, userID string, 
 
 	return metrics, nil
 }
+
 

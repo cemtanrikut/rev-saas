@@ -1,10 +1,8 @@
-const ProgressIndicator = ({ currentStep, totalSteps }) => {
-  const steps = [
-    { number: 1, label: 'Company' },
-    { number: 2, label: 'Pricing' },
-    { number: 3, label: 'Competitors' },
-    { number: 4, label: 'Stripe' }
-  ];
+const ProgressIndicator = ({ currentStep, totalSteps, stepLabels }) => {
+  // Build steps array from labels
+  const steps = stepLabels
+    ? stepLabels.map((label, index) => ({ number: index + 1, label }))
+    : Array.from({ length: totalSteps }, (_, i) => ({ number: i + 1, label: `Step ${i + 1}` }));
 
   return (
     <div className="mb-12">
@@ -69,6 +67,3 @@ const ProgressIndicator = ({ currentStep, totalSteps }) => {
 };
 
 export default ProgressIndicator;
-
-
-

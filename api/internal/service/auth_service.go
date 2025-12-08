@@ -206,3 +206,8 @@ func (s *AuthService) GetUserWithCompany(ctx context.Context, userID string) (*m
 
 	return user, company, nil
 }
+
+// GenerateTokenForUser generates a JWT token for a user ID.
+func (s *AuthService) GenerateTokenForUser(userID string) (string, error) {
+	return s.jwt.GenerateToken(userID)
+}

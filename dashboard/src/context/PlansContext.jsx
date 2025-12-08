@@ -28,8 +28,9 @@ export const PlansProvider = ({ children }) => {
         id: plan.id,
         name: plan.name,
         price: plan.price,
-        interval: 'monthly', // Default, backend doesn't store this yet
-        description: '',     // Default, backend doesn't store this yet
+        currency: plan.currency || 'USD',
+        interval: plan.billing_cycle || 'monthly',
+        description: '',
         createdAt: plan.created_at
       }));
       setPlans(transformedPlans);
@@ -50,18 +51,24 @@ export const PlansProvider = ({ children }) => {
   }, [authLoading, fetchPlans]);
 
   // Add a new plan via API
-  const addPlan = async ({ name, price, interval, description }) => {
+  const addPlan = async ({ name, price, currency, interval, description }) => {
     setError(null);
 
     try {
-      const { data } = await plansApi.create(name, Number(price));
+      const { data } = await plansApi.create(
+        name, 
+        Number(price), 
+        currency || 'USD', 
+        interval || 'monthly'
+      );
       
       // Add the new plan to state with local-only fields
       const newPlan = {
         id: data.id,
         name: data.name,
         price: data.price,
-        interval: interval || 'monthly',
+        currency: data.currency || currency || 'USD',
+        interval: data.billing_cycle || interval || 'monthly',
         description: description || '',
         createdAt: data.created_at
       };

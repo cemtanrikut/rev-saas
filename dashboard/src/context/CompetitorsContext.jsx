@@ -28,7 +28,12 @@ export const CompetitorsProvider = ({ children }) => {
         id: comp.id,
         name: comp.name || '',
         url: comp.url || '',
-        basePrice: comp.base_price || 0,
+        plans: (comp.plans || []).map(p => ({
+          name: p.name || 'Default',
+          price: p.price || 0,
+          currency: p.currency || 'USD',
+          billingCycle: p.billing_cycle || 'monthly',
+        })),
         createdAt: comp.created_at
       }));
       setCompetitors(transformedCompetitors);
@@ -49,18 +54,31 @@ export const CompetitorsProvider = ({ children }) => {
   }, [authLoading, fetchCompetitors]);
 
   // Add a new competitor via API
-  const addCompetitor = async ({ name, url, basePrice = 0 }) => {
+  const addCompetitor = async ({ name, url, plans = [] }) => {
     setError(null);
 
     try {
-      const { data } = await competitorsApi.create(name || '', url, basePrice);
+      // Convert plans to backend format
+      const backendPlans = plans.map(p => ({
+        name: p.name,
+        price: p.price,
+        currency: p.currency || 'USD',
+        billing_cycle: p.billingCycle || 'monthly',
+      }));
+
+      const { data } = await competitorsApi.create(name || '', url || '', backendPlans);
       
       // Add the new competitor to state
       const newCompetitor = {
         id: data.id,
         name: data.name || '',
         url: data.url || '',
-        basePrice: data.base_price || 0,
+        plans: (data.plans || []).map(p => ({
+          name: p.name || 'Default',
+          price: p.price || 0,
+          currency: p.currency || 'USD',
+          billingCycle: p.billing_cycle || 'monthly',
+        })),
         createdAt: data.created_at
       };
       

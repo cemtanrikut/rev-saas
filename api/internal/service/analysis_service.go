@@ -172,10 +172,13 @@ func (s *AnalysisService) RunAnalysisWithInput(ctx context.Context, userID strin
 	}
 
 	// Extract competitor prices and compute statistics
-	competitorPrices := make([]float64, 0, numCompetitors)
+	// Now competitors have multiple plans, extract all prices
+	competitorPrices := make([]float64, 0)
 	for _, c := range competitors {
-		if c.BasePrice > 0 {
-			competitorPrices = append(competitorPrices, c.BasePrice)
+		for _, p := range c.Plans {
+			if p.Price > 0 {
+				competitorPrices = append(competitorPrices, p.Price)
+			}
 		}
 	}
 

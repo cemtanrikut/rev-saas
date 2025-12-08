@@ -7,6 +7,7 @@ const Plans = () => {
   const [formData, setFormData] = useState({
     name: '',
     price: '',
+    currency: 'USD',
     interval: 'monthly',
     description: ''
   });
@@ -63,6 +64,7 @@ const Plans = () => {
     const result = await addPlan({
       name: formData.name.trim(),
       price: formData.price,
+      currency: formData.currency,
       interval: formData.interval,
       description: formData.description.trim()
     });
@@ -74,6 +76,7 @@ const Plans = () => {
       setFormData({
         name: '',
         price: '',
+        currency: 'USD',
         interval: 'monthly',
         description: ''
       });
@@ -91,10 +94,10 @@ const Plans = () => {
     setRemovingId(null);
   };
 
-  const formatPrice = (price, interval) => {
+  const formatPrice = (price, currency, interval) => {
     const formattedPrice = new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'USD',
+      currency: currency || 'USD',
       minimumFractionDigits: 0,
       maximumFractionDigits: 2
     }).format(price);
@@ -159,25 +162,46 @@ const Plans = () => {
               )}
             </div>
 
-            {/* Price */}
+            {/* Price and Currency */}
             <div>
               <label htmlFor="price" className="block text-sm font-semibold text-slate-300 mb-2">
-                Price (USD)
+                Price
               </label>
-              <input
-                id="price"
-                name="price"
-                type="number"
-                step="0.01"
-                min="0"
-                value={formData.price}
-                onChange={handleChange}
-                disabled={isSubmitting}
-                className={`w-full px-4 py-3 rounded-xl bg-slate-900/50 border ${
-                  errors.price ? 'border-red-500' : 'border-slate-700'
-                } text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all disabled:opacity-50`}
-                placeholder="29.99"
-              />
+              <div className="flex gap-2">
+                <select
+                  id="currency"
+                  name="currency"
+                  value={formData.currency}
+                  onChange={handleChange}
+                  disabled={isSubmitting}
+                  className="w-24 px-3 py-3 rounded-xl bg-slate-900/50 border border-slate-700 text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all appearance-none pr-8 disabled:opacity-50"
+                  style={{
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23cbd5e1'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'right 0.5rem center',
+                    backgroundSize: '1rem'
+                  }}
+                >
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                  <option value="GBP">GBP</option>
+                  <option value="TRY">TRY</option>
+                </select>
+                <input
+                  id="price"
+                  name="price"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.price}
+                  onChange={handleChange}
+                  disabled={isSubmitting}
+                  className={`flex-1 px-4 py-3 rounded-xl bg-slate-900/50 border ${
+                    errors.price ? 'border-red-500' : 'border-slate-700'
+                  } text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all disabled:opacity-50`}
+                  placeholder="29.99"
+                />
+              </div>
               {errors.price && (
                 <p className="text-sm text-red-400 mt-1">{errors.price}</p>
               )}
@@ -292,7 +316,7 @@ const Plans = () => {
                       {plan.name}
                     </h4>
                     <div className="text-2xl font-bold text-blue-400">
-                      {formatPrice(plan.price, plan.interval)}
+                      {formatPrice(plan.price, plan.currency, plan.interval)}
                     </div>
                   </div>
                   <button

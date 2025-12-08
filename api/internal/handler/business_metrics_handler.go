@@ -21,10 +21,12 @@ func NewBusinessMetricsHandler(service *service.BusinessMetricsService) *Busines
 }
 
 type setMetricsRequest struct {
-	Currency         string  `json:"currency"`
-	MRR              float64 `json:"mrr"`
-	Customers        int     `json:"customers"`
-	MonthlyChurnRate float64 `json:"monthly_churn_rate"`
+	Currency         string   `json:"currency"`
+	MRR              float64  `json:"mrr"`
+	Customers        int      `json:"customers"`
+	MonthlyChurnRate float64  `json:"monthly_churn_rate"`
+	PricingGoal      string   `json:"pricing_goal"`
+	TargetArrGrowth  *float64 `json:"target_arr_growth"` // nullable/optional
 }
 
 // Get handles GET /api/business-metrics - retrieves the current user's business metrics.
@@ -72,6 +74,8 @@ func (h *BusinessMetricsHandler) Set(w http.ResponseWriter, r *http.Request) {
 		MRR:              req.MRR,
 		Customers:        req.Customers,
 		MonthlyChurnRate: req.MonthlyChurnRate,
+		PricingGoal:      req.PricingGoal,
+		TargetArrGrowth:  req.TargetArrGrowth,
 	}
 
 	metrics, err := h.service.SetMetrics(r.Context(), userID, input)
@@ -91,4 +95,5 @@ func (h *BusinessMetricsHandler) Set(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(metrics)
 }
+
 
