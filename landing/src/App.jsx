@@ -1,5 +1,6 @@
 import Navbar from './components/Navbar'
 import Hero from './components/Hero'
+import SimulationShowcase from './components/SimulationShowcase'
 import ProductSection from './components/ProductSection'
 import HowItWorks from './components/HowItWorks'
 import ForFounders from './components/ForFounders'
@@ -12,6 +13,7 @@ function App() {
     <div className="min-h-screen bg-white">
       <Navbar />
       <Hero />
+      <SimulationShowcase />
       <ProductSection />
       <HowItWorks />
       <ForFounders />

@@ -35,6 +35,13 @@ const Sidebar = () => {
       )
     },
     {
+      name: 'Simulation',
+      path: '/app/simulation',
+      icon: (
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+      )
+    },
+    {
       name: 'Reports',
       path: '/app/reports',
       icon: (

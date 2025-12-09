@@ -14,6 +14,7 @@ import Overview from './pages/dashboard/Overview';
 import Analyses from './pages/dashboard/Analyses';
 import Competitors from './pages/dashboard/Competitors';
 import Plans from './pages/dashboard/Plans';
+import PricingSimulation from './pages/dashboard/PricingSimulation';
 import Reports from './pages/dashboard/Reports';
 import Settings from './pages/dashboard/Settings';
 import Billing from './pages/dashboard/Billing';
@@ -94,6 +95,10 @@ export const router = createBrowserRouter([
       {
         path: 'plans',
         element: <Plans />
+      },
+      {
+        path: 'simulation',
+        element: <PricingSimulation />
       },
       {
         path: 'reports',

@@ -21,6 +21,12 @@ func main() {
 	// Load configuration
 	cfg := config.Load()
 
+	// Load elasticity configuration for pricing simulations
+	elasticityCfg, err := config.LoadElasticityConfig()
+	if err != nil {
+		log.Fatalf("failed to load elasticity config: %v", err)
+	}
+
 	// Initialize MongoDB connection
 	mongoClient, err := mongorepo.NewClient(cfg.MongoURI, cfg.MongoDB)
 	if err != nil {
@@ -45,6 +51,7 @@ func main() {
 	competitorRepo := mongorepo.NewCompetitorRepository(db)
 	analysisRepo := mongorepo.NewAnalysisRepository(db)
 	businessMetricsRepo := mongorepo.NewBusinessMetricsRepository(db)
+	simulationRepo := mongorepo.NewSimulationRepository(db)
 
 	// Initialize services
 	jwtService := service.NewJWTService(cfg.JWTSecret)
@@ -55,6 +62,7 @@ func main() {
 	businessMetricsService := service.NewBusinessMetricsService(businessMetricsRepo)
 	limitsService := service.NewLimitsService(userRepo, planRepo, competitorRepo, analysisRepo)
 	aiPricingService := service.NewAIPricingService(cfg.OpenAIAPIKey)
+	simulationService := service.NewSimulationService(elasticityCfg, simulationRepo, planRepo, aiPricingService)
 
 	// Initialize middleware
 	authMiddleware := middleware.NewAuthMiddleware(jwtService, userRepo)
@@ -68,9 +76,10 @@ func main() {
 	analysisPDFHandler := handler.NewAnalysisPDFHandler(analysisService, businessMetricsRepo)
 	businessMetricsHandler := handler.NewBusinessMetricsHandler(businessMetricsService)
 	limitsHandler := handler.NewLimitsHandler(limitsService)
+	simulationHandler := handler.NewSimulationHandler(simulationService, aiPricingService)
 
 	// Create router
-	r := router.NewRouter(healthHandler, authHandler, planHandler, competitorHandler, analysisHandler, analysisPDFHandler, businessMetricsHandler, limitsHandler, authMiddleware)
+	r := router.NewRouter(healthHandler, authHandler, planHandler, competitorHandler, analysisHandler, analysisPDFHandler, businessMetricsHandler, limitsHandler, simulationHandler, authMiddleware)
 
 	// Configure HTTP server
 	srv := &http.Server{

@@ -135,6 +135,19 @@ export const deleteJson = async (path, options = {}) => {
   });
 };
 
+// PUT request with JSON body
+export const putJson = async (path, body = {}, options = {}) => {
+  const url = `${API_BASE_URL}${path}`;
+  const includeAuth = options.includeAuth !== false;
+
+  return fetchWithError(url, {
+    method: 'PUT',
+    headers: buildHeaders(includeAuth),
+    body: JSON.stringify(body),
+    ...options,
+  });
+};
+
 // Auth-specific API calls
 export const authApi = {
   signup: (signupData) => 
@@ -168,6 +181,7 @@ export const plansApi = {
 export const competitorsApi = {
   list: () => getJson('/api/competitors'),
   create: (name, url, plans) => postJson('/api/competitors', { name, url, plans }),
+  update: (id, name, url, plans) => putJson(`/api/competitors/${id}`, { name, url, plans }),
   delete: (id) => deleteJson(`/api/competitors/${id}`),
 };
 
@@ -250,10 +264,35 @@ export const businessMetricsApi = {
   },
 };
 
+// Simulation API calls
+export const simulationApi = {
+  run: (data) => postJson('/api/simulations', {
+    plan_id: data.planId,
+    current_price: data.currentPrice,
+    new_price: data.newPrice,
+    currency: data.currency,
+    active_customers_on_plan: data.activeCustomersOnPlan,
+    global_mrr: data.globalMrr,
+    global_churn_rate: data.globalChurnRate,
+    pricing_goal: data.pricingGoal,
+  }),
+  list: (limit = 10, planId = null) => {
+    const params = new URLSearchParams({ limit: limit.toString() });
+    if (planId) params.append('plan_id', planId);
+    return getJson(`/api/simulations?${params}`);
+  },
+  get: (id) => getJson(`/api/simulations/${id}`),
+  exportPdf: async (simulationId) => {
+    const { ok, blob } = await fetchBlob(`/api/simulations/${simulationId}/pdf`);
+    return { ok, blob };
+  },
+};
+
 export default {
   postJson,
   getJson,
   deleteJson,
+  putJson,
   fetchBlob,
   downloadBlob,
   getToken,
@@ -264,5 +303,6 @@ export default {
   competitorsApi,
   analysisApi,
   businessMetricsApi,
+  simulationApi,
 };
 

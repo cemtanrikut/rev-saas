@@ -106,6 +106,44 @@ export const CompetitorsProvider = ({ children }) => {
     }
   };
 
+  // Update a competitor via API
+  const updateCompetitor = async (id, { name, url, plans = [] }) => {
+    setError(null);
+
+    try {
+      // Convert plans to backend format
+      const backendPlans = plans.map(p => ({
+        name: p.name,
+        price: p.price,
+        currency: p.currency || 'USD',
+        billing_cycle: p.billingCycle || 'monthly',
+      }));
+
+      const { data } = await competitorsApi.update(id, name || '', url || '', backendPlans);
+      
+      // Update the competitor in state
+      const updatedCompetitor = {
+        id: data.id,
+        name: data.name || '',
+        url: data.url || '',
+        plans: (data.plans || []).map(p => ({
+          name: p.name || 'Default',
+          price: p.price || 0,
+          currency: p.currency || 'USD',
+          billingCycle: p.billing_cycle || 'monthly',
+        })),
+        createdAt: data.created_at
+      };
+      
+      setCompetitors(prev => prev.map(c => c.id === id ? updatedCompetitor : c));
+      return { success: true, competitor: updatedCompetitor };
+    } catch (err) {
+      console.error('Failed to update competitor:', err);
+      setError(err.message || 'Failed to update competitor');
+      return { success: false, error: err.message };
+    }
+  };
+
   // Clear all competitors locally (for reset demo data feature)
   const clearCompetitors = () => {
     setCompetitors([]);
@@ -126,6 +164,7 @@ export const CompetitorsProvider = ({ children }) => {
     isLoading,
     error,
     addCompetitor,
+    updateCompetitor,
     removeCompetitor,
     clearCompetitors,
     resetCompetitors,

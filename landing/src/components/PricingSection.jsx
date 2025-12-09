@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import { useInView } from 'framer-motion';
 import { useRef } from 'react';
 
-const PricingCard = ({ plan, price, description, features, isPopular, delay }) => {
+const PricingCard = ({ plan, price, description, features, creditNote, isPopular, delay }) => {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: "-100px" });
 
@@ -44,7 +44,12 @@ const PricingCard = ({ plan, price, description, features, isPopular, delay }) =
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <span className="text-slate-300 leading-relaxed">{feature}</span>
+              <div className="flex flex-col">
+                <span className="text-slate-300 leading-relaxed">{feature}</span>
+                {feature.includes('AI Insight Credits') && creditNote && (
+                  <span className="text-sm font-medium text-blue-400 mt-1">({creditNote})</span>
+                )}
+              </div>
             </li>
           ))}
         </ul>
@@ -68,44 +73,46 @@ const PricingSection = () => {
     {
       plan: "Starter",
       price: "€69",
-      description: "For early-stage SaaS founders",
+      description: "For small SaaS teams",
       features: [
-        "Up to 3 competitors",
         "Up to 3 pricing plans",
-        "5 analyses per month",
-        "AI-powered pricing report",
-        "PDF export included"
+        "Up to 3 competitors",
+        "AI-powered pricing analysis",
+        "5 AI Insight Credits / month",
+        "PDF export of pricing reports"
       ],
+      creditNote: "AI analyses only",
       isPopular: false
     },
     {
       plan: "Growth",
       price: "€159",
-      description: "For scaling SaaS companies",
+      description: "For growing SaaS companies",
       features: [
-        "Up to 5 competitors",
         "Up to 5 pricing plans",
-        "10 analyses per month",
-        "Multi-scenario AI reports",
-        "Pricing trend insights",
-        "Request competitor additions",
-        "CSV & Excel export"
+        "Up to 5 competitors",
+        "AI-powered pricing analysis",
+        "Pricing simulations (what-if analysis)",
+        "20 AI Insight Credits / month",
+        "PDF export of analyses & simulations"
       ],
+      creditNote: "AI analyses + simulations",
       isPopular: true
     },
     {
       plan: "Enterprise",
       price: "€399",
-      description: "For established SaaS teams",
+      description: "For larger SaaS companies",
       features: [
-        "Up to 10 competitors",
-        "Up to 7 pricing plans",
-        "20 analyses per month",
-        "Strategic AI pricing report",
-        "Priority competitor integration",
+        "7+ pricing plans",
+        "10+ competitors",
+        "Full AI-powered pricing analysis",
+        "Full pricing simulations access",
+        "100 AI Insight Credits / month",
         "CSV & Excel export",
-        "3 team seats included"
+        "3 team seats (multi-user access)"
       ],
+      creditNote: "AI analyses + simulations",
       isPopular: false
     }
   ];
@@ -139,6 +146,7 @@ const PricingSection = () => {
               price={plan.price}
               description={plan.description}
               features={plan.features}
+              creditNote={plan.creditNote}
               isPopular={plan.isPopular}
               delay={index * 0.1}
             />
