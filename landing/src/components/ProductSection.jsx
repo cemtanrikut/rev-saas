@@ -12,10 +12,10 @@ const FeatureCard = ({ title, description, icon, delay, color }) => {
       initial={{ opacity: 0, y: 20 }}
       animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
       transition={{ duration: 0.5, delay }}
-      className="group"
+      className="group h-full"
     >
-      <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700 hover:border-blue-500/50 hover:shadow-xl hover:shadow-blue-500/10 transition-all duration-300">
-        <div className="flex items-start gap-4">
+      <div className="h-full bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700 hover:border-blue-500/50 hover:shadow-xl hover:shadow-blue-500/10 transition-all duration-300">
+        <div className="flex items-start gap-4 h-full">
           <div className="flex-shrink-0">
             <div className={`w-14 h-14 ${color} rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300 shadow-lg`}>
               <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -59,14 +59,6 @@ const ProductSection = () => {
       icon: (
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
       ),
-      title: "Model pricing scenarios",
-      description: "Run simulations on pricing changes. See projected impact on revenue, churn, and acquisition before you act.",
-      color: "bg-gradient-to-br from-sky-500 to-sky-600"
-    },
-    {
-      icon: (
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-      ),
       title: "Get AI pricing recommendations",
       description: "Receive concrete recommendations on how to adjust your pricing with specific moves and revenue forecasts.",
       color: "bg-gradient-to-br from-violet-500 to-violet-600"
@@ -90,11 +82,11 @@ const ProductSection = () => {
             Complete pricing intelligence
           </h2>
           <p className="text-xl text-slate-400 max-w-2xl mx-auto">
-            Connect your data with market insights in four simple steps
+            From your data to actionable insights in three steps
           </p>
         </motion.div>
 
-        <div className="grid md:grid-cols-2 gap-6">
+        <div className="grid md:grid-cols-3 gap-6">
           {features.map((feature, index) => (
             <FeatureCard
               key={index}

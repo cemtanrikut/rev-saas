@@ -1,0 +1,178 @@
+{
+  "priceChangeBuckets": [
+    {
+      "minChangePct": -100,
+      "maxChangePct": -20,
+      "description": "Large price decrease (>20%)",
+      "profiles": {
+        "revenue": {
+          "conservative": { "customerGainMinPct": 5, "customerGainMaxPct": 10 },
+          "base": { "customerGainMinPct": 10, "customerGainMaxPct": 20 },
+          "aggressive": { "customerGainMinPct": 15, "customerGainMaxPct": 30 }
+        },
+        "retention": {
+          "conservative": { "customerGainMinPct": 8, "customerGainMaxPct": 15 },
+          "base": { "customerGainMinPct": 15, "customerGainMaxPct": 25 },
+          "aggressive": { "customerGainMinPct": 20, "customerGainMaxPct": 35 }
+        },
+        "conversion": {
+          "conservative": { "customerGainMinPct": 10, "customerGainMaxPct": 18 },
+          "base": { "customerGainMinPct": 18, "customerGainMaxPct": 30 },
+          "aggressive": { "customerGainMinPct": 25, "customerGainMaxPct": 40 }
+        },
+        "differentiation": {
+          "conservative": { "customerGainMinPct": 3, "customerGainMaxPct": 8 },
+          "base": { "customerGainMinPct": 8, "customerGainMaxPct": 15 },
+          "aggressive": { "customerGainMinPct": 12, "customerGainMaxPct": 22 }
+        }
+      }
+    },
+    {
+      "minChangePct": -20,
+      "maxChangePct": -10,
+      "description": "Moderate price decrease (10-20%)",
+      "profiles": {
+        "revenue": {
+          "conservative": { "customerGainMinPct": 3, "customerGainMaxPct": 6 },
+          "base": { "customerGainMinPct": 6, "customerGainMaxPct": 12 },
+          "aggressive": { "customerGainMinPct": 10, "customerGainMaxPct": 18 }
+        },
+        "retention": {
+          "conservative": { "customerGainMinPct": 5, "customerGainMaxPct": 10 },
+          "base": { "customerGainMinPct": 10, "customerGainMaxPct": 18 },
+          "aggressive": { "customerGainMinPct": 15, "customerGainMaxPct": 25 }
+        },
+        "conversion": {
+          "conservative": { "customerGainMinPct": 6, "customerGainMaxPct": 12 },
+          "base": { "customerGainMinPct": 12, "customerGainMaxPct": 20 },
+          "aggressive": { "customerGainMinPct": 18, "customerGainMaxPct": 28 }
+        },
+        "differentiation": {
+          "conservative": { "customerGainMinPct": 2, "customerGainMaxPct": 5 },
+          "base": { "customerGainMinPct": 5, "customerGainMaxPct": 10 },
+          "aggressive": { "customerGainMinPct": 8, "customerGainMaxPct": 15 }
+        }
+      }
+    },
+    {
+      "minChangePct": -10,
+      "maxChangePct": 0,
+      "description": "Small price decrease (0-10%)",
+      "profiles": {
+        "revenue": {
+          "conservative": { "customerGainMinPct": 1, "customerGainMaxPct": 3 },
+          "base": { "customerGainMinPct": 3, "customerGainMaxPct": 6 },
+          "aggressive": { "customerGainMinPct": 5, "customerGainMaxPct": 10 }
+        },
+        "retention": {
+          "conservative": { "customerGainMinPct": 2, "customerGainMaxPct": 5 },
+          "base": { "customerGainMinPct": 5, "customerGainMaxPct": 10 },
+          "aggressive": { "customerGainMinPct": 8, "customerGainMaxPct": 15 }
+        },
+        "conversion": {
+          "conservative": { "customerGainMinPct": 3, "customerGainMaxPct": 6 },
+          "base": { "customerGainMinPct": 6, "customerGainMaxPct": 12 },
+          "aggressive": { "customerGainMinPct": 10, "customerGainMaxPct": 18 }
+        },
+        "differentiation": {
+          "conservative": { "customerGainMinPct": 1, "customerGainMaxPct": 2 },
+          "base": { "customerGainMinPct": 2, "customerGainMaxPct": 5 },
+          "aggressive": { "customerGainMinPct": 4, "customerGainMaxPct": 8 }
+        }
+      }
+    },
+    {
+      "minChangePct": 0,
+      "maxChangePct": 10,
+      "description": "Small price increase (0-10%)",
+      "profiles": {
+        "revenue": {
+          "conservative": { "customerLossMinPct": 1, "customerLossMaxPct": 3 },
+          "base": { "customerLossMinPct": 2, "customerLossMaxPct": 5 },
+          "aggressive": { "customerLossMinPct": 4, "customerLossMaxPct": 8 }
+        },
+        "retention": {
+          "conservative": { "customerLossMinPct": 2, "customerLossMaxPct": 5 },
+          "base": { "customerLossMinPct": 4, "customerLossMaxPct": 8 },
+          "aggressive": { "customerLossMinPct": 6, "customerLossMaxPct": 12 }
+        },
+        "conversion": {
+          "conservative": { "customerLossMinPct": 3, "customerLossMaxPct": 6 },
+          "base": { "customerLossMinPct": 5, "customerLossMaxPct": 10 },
+          "aggressive": { "customerLossMinPct": 8, "customerLossMaxPct": 15 }
+        },
+        "differentiation": {
+          "conservative": { "customerLossMinPct": 1, "customerLossMaxPct": 2 },
+          "base": { "customerLossMinPct": 2, "customerLossMaxPct": 4 },
+          "aggressive": { "customerLossMinPct": 3, "customerLossMaxPct": 6 }
+        }
+      }
+    },
+    {
+      "minChangePct": 10,
+      "maxChangePct": 20,
+      "description": "Moderate price increase (10-20%)",
+      "profiles": {
+        "revenue": {
+          "conservative": { "customerLossMinPct": 3, "customerLossMaxPct": 6 },
+          "base": { "customerLossMinPct": 5, "customerLossMaxPct": 10 },
+          "aggressive": { "customerLossMinPct": 8, "customerLossMaxPct": 15 }
+        },
+        "retention": {
+          "conservative": { "customerLossMinPct": 5, "customerLossMaxPct": 10 },
+          "base": { "customerLossMinPct": 8, "customerLossMaxPct": 15 },
+          "aggressive": { "customerLossMinPct": 12, "customerLossMaxPct": 22 }
+        },
+        "conversion": {
+          "conservative": { "customerLossMinPct": 6, "customerLossMaxPct": 12 },
+          "base": { "customerLossMinPct": 10, "customerLossMaxPct": 18 },
+          "aggressive": { "customerLossMinPct": 15, "customerLossMaxPct": 25 }
+        },
+        "differentiation": {
+          "conservative": { "customerLossMinPct": 2, "customerLossMaxPct": 4 },
+          "base": { "customerLossMinPct": 4, "customerLossMaxPct": 8 },
+          "aggressive": { "customerLossMinPct": 6, "customerLossMaxPct": 12 }
+        }
+      }
+    },
+    {
+      "minChangePct": 20,
+      "maxChangePct": 100,
+      "description": "Large price increase (>20%)",
+      "profiles": {
+        "revenue": {
+          "conservative": { "customerLossMinPct": 8, "customerLossMaxPct": 15 },
+          "base": { "customerLossMinPct": 12, "customerLossMaxPct": 22 },
+          "aggressive": { "customerLossMinPct": 18, "customerLossMaxPct": 30 }
+        },
+        "retention": {
+          "conservative": { "customerLossMinPct": 12, "customerLossMaxPct": 20 },
+          "base": { "customerLossMinPct": 18, "customerLossMaxPct": 28 },
+          "aggressive": { "customerLossMinPct": 25, "customerLossMaxPct": 40 }
+        },
+        "conversion": {
+          "conservative": { "customerLossMinPct": 15, "customerLossMaxPct": 25 },
+          "base": { "customerLossMinPct": 22, "customerLossMaxPct": 35 },
+          "aggressive": { "customerLossMinPct": 30, "customerLossMaxPct": 50 }
+        },
+        "differentiation": {
+          "conservative": { "customerLossMinPct": 5, "customerLossMaxPct": 10 },
+          "base": { "customerLossMinPct": 8, "customerLossMaxPct": 15 },
+          "aggressive": { "customerLossMinPct": 12, "customerLossMaxPct": 22 }
+        }
+      }
+    }
+  ],
+  "churnAdjustment": {
+    "highChurnThreshold": 8.0,
+    "highChurnMultiplier": 1.3,
+    "lowChurnThreshold": 4.0,
+    "lowChurnMultiplier": 0.8
+  },
+  "riskLevelThresholds": {
+    "lowMaxPct": 10,
+    "mediumMaxPct": 25
+  }
+}
+
+

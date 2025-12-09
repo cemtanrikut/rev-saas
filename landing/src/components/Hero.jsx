@@ -51,7 +51,7 @@ const Hero = () => {
             transition={{ duration: 0.6, delay: 0.3 }}
             className="text-lg md:text-xl text-slate-400 leading-relaxed max-w-3xl mx-auto mb-10"
           >
-            Revalyze analyzes your competitors, Stripe metrics, churn, and positioning to generate optimal pricing for every plan.
+            Analyze your SaaS pricing, simulate new price points, and get AI-backed recommendations before you ship changes.
           </motion.p>
 
           <motion.div

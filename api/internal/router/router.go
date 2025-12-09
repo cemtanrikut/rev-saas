@@ -19,6 +19,7 @@ func NewRouter(
 	analysisPDFHandler *handler.AnalysisPDFHandler,
 	businessMetricsHandler *handler.BusinessMetricsHandler,
 	limitsHandler *handler.LimitsHandler,
+	simulationHandler *handler.SimulationHandler,
 	authMiddleware *middleware.AuthMiddleware,
 ) http.Handler {
 	r := mux.NewRouter()
@@ -52,6 +53,7 @@ func NewRouter(
 	// Competitors
 	api.HandleFunc("/competitors", competitorHandler.Create).Methods(http.MethodPost)
 	api.HandleFunc("/competitors", competitorHandler.List).Methods(http.MethodGet)
+	api.HandleFunc("/competitors/{id}", competitorHandler.Update).Methods(http.MethodPut)
 	api.HandleFunc("/competitors/{id}", competitorHandler.Delete).Methods(http.MethodDelete)
 
 	// Analysis
@@ -62,6 +64,12 @@ func NewRouter(
 	// Business Metrics
 	api.HandleFunc("/business-metrics", businessMetricsHandler.Get).Methods(http.MethodGet)
 	api.HandleFunc("/business-metrics", businessMetricsHandler.Set).Methods(http.MethodPut)
+
+	// Simulations
+	api.HandleFunc("/simulations", simulationHandler.Create).Methods(http.MethodPost)
+	api.HandleFunc("/simulations", simulationHandler.List).Methods(http.MethodGet)
+	api.HandleFunc("/simulations/{id}", simulationHandler.Get).Methods(http.MethodGet)
+	api.HandleFunc("/simulations/{id}/pdf", simulationHandler.ExportPDF).Methods(http.MethodGet)
 
 	// Apply CORS middleware to all routes
 	return middleware.CORS(r)

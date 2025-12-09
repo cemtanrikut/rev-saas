@@ -159,3 +159,54 @@ func (h *CompetitorHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// Update handles competitor updates.
+func (h *CompetitorHandler) Update(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.UserIDFromContext(r.Context())
+	if userID == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	vars := mux.Vars(r)
+	id := vars["id"]
+	if id == "" {
+		http.Error(w, "missing competitor id", http.StatusBadRequest)
+		return
+	}
+
+	var req createCompetitorRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Convert request plans to service input
+	planInputs := make([]service.CompetitorPlanInput, 0, len(req.Plans))
+	for _, p := range req.Plans {
+		planInputs = append(planInputs, service.CompetitorPlanInput{
+			Name:         p.Name,
+			Price:        p.Price,
+			Currency:     p.Currency,
+			BillingCycle: p.BillingCycle,
+		})
+	}
+
+	competitor, err := h.service.UpdateCompetitor(r.Context(), userID, id, service.CompetitorInput{
+		Name:  req.Name,
+		URL:   req.URL,
+		Plans: planInputs,
+	})
+	if err != nil {
+		if err == service.ErrCompetitorNotFound {
+			http.Error(w, "competitor not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(competitor)
+}

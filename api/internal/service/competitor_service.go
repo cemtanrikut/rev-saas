@@ -132,3 +132,69 @@ func (s *CompetitorService) DeleteCompetitor(ctx context.Context, userID, compet
 
 	return nil
 }
+
+// UpdateCompetitor updates a competitor by ID, ensuring it belongs to the user.
+func (s *CompetitorService) UpdateCompetitor(ctx context.Context, userID, competitorID string, input CompetitorInput) (*model.Competitor, error) {
+	name := strings.TrimSpace(input.Name)
+	if name == "" {
+		return nil, errors.New("competitor name is required")
+	}
+
+	uid, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return nil, errors.New("invalid user id")
+	}
+
+	cid, err := primitive.ObjectIDFromHex(competitorID)
+	if err != nil {
+		return nil, errors.New("invalid competitor id")
+	}
+
+	// Convert plan inputs to model plans
+	plans := make([]model.CompetitorPlan, 0, len(input.Plans))
+	for _, p := range input.Plans {
+		planName := strings.TrimSpace(p.Name)
+		if planName == "" {
+			planName = "Default"
+		}
+
+		currency := strings.TrimSpace(p.Currency)
+		if currency == "" {
+			currency = "USD"
+		}
+
+		billingCycle := strings.TrimSpace(p.BillingCycle)
+		if billingCycle == "" {
+			billingCycle = "monthly"
+		}
+
+		if p.Price < 0 {
+			return nil, errors.New("plan price must be non-negative")
+		}
+
+		plans = append(plans, model.CompetitorPlan{
+			Name:         planName,
+			Price:        p.Price,
+			Currency:     currency,
+			BillingCycle: billingCycle,
+		})
+	}
+
+	competitor := &model.Competitor{
+		ID:     cid,
+		UserID: uid,
+		Name:   name,
+		URL:    strings.TrimSpace(input.URL),
+		Plans:  plans,
+	}
+
+	err = s.repo.UpdateByIDAndUser(ctx, cid, uid, competitor)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, ErrCompetitorNotFound
+		}
+		return nil, err
+	}
+
+	return competitor, nil
+}

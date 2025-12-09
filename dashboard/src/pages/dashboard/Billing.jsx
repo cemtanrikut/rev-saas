@@ -38,14 +38,17 @@ const Billing = () => {
       price: 69,
       currency: '€',
       interval: 'month',
-      description: 'For early-stage SaaS founders',
+      description: 'For small SaaS teams',
       features: [
-        '3 competitors',
-        '3 pricing plans',
-        '5 analyses / month',
-        'AI-powered report (single scenario)',
-        'PDF export'
+        'Up to 3 pricing plans',
+        'Up to 3 competitors',
+        'AI-powered pricing analysis',
+        '5 AI Insight Credits / month',
+        'PDF export of pricing reports',
+        'Email support'
       ],
+      creditNote: 'AI analyses only',
+      simulationNote: 'Pricing simulations not included',
       cta: 'Upgrade',
       popular: false
     },
@@ -54,34 +57,39 @@ const Billing = () => {
       price: 159,
       currency: '€',
       interval: 'month',
-      description: 'For scaling SaaS companies',
+      description: 'For growing SaaS companies',
       features: [
-        '5 competitors',
-        '5 pricing plans',
-        '10 analyses / month',
-        'AI-powered report (multi-scenario)',
-        'Pricing trend insights',
-        'Competitor additions',
-        'CSV & Excel export'
+        'Up to 5 pricing plans',
+        'Up to 5 competitors',
+        'AI-powered pricing analysis',
+        'Pricing simulations (what-if analysis)',
+        '20 AI Insight Credits / month',
+        'PDF export of analyses & simulations',
+        'Priority email support'
       ],
+      creditNote: 'AI analyses + simulations',
+      simulationNote: 'Includes pricing simulations (what-if analysis)',
       cta: 'Upgrade',
       popular: true
     },
     {
       name: 'Enterprise',
-      price: 399,
+      priceLabel: 'from €399',
       currency: '€',
       interval: 'month',
-      description: 'For established SaaS teams',
+      description: 'For larger SaaS companies',
       features: [
-        '10 competitors',
-        '7 pricing plans',
-        '20 analyses / month',
-        'Strategic AI report',
-        'Priority competitor integration',
+        '7+ pricing plans',
+        '10+ competitors',
+        'Full AI-powered pricing analysis',
+        'Full pricing simulations access',
+        '100 AI Insight Credits / month',
         'CSV & Excel export',
-        '3 team seats'
+        '3 team seats (multi-user access)',
+        'Dedicated onboarding & priority support'
       ],
+      creditNote: 'AI analyses + simulations',
+      simulationNote: 'Full simulations, advanced exports and team seats',
       cta: 'Contact Sales',
       popular: false
     }
@@ -176,17 +184,25 @@ const Billing = () => {
               {/* Price */}
               <div className="mb-5">
                 <div className="flex items-baseline gap-1">
-                  <span className="text-4xl font-bold text-white">
-                    {plan.currency}{plan.price}
-                  </span>
-                  <span className="text-slate-400 text-sm">
-                    /{plan.interval}
-                  </span>
+                  {plan.priceLabel ? (
+                    <span className="text-4xl font-bold text-white">
+                      {plan.priceLabel}
+                    </span>
+                  ) : (
+                    <>
+                      <span className="text-4xl font-bold text-white">
+                        {plan.currency}{plan.price}
+                      </span>
+                      <span className="text-slate-400 text-sm">
+                        /{plan.interval}
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
 
               {/* Features List */}
-              <ul className="space-y-2.5 mb-6">
+              <ul className="space-y-2.5 mb-4">
                 {plan.features.map((feature, index) => (
                   <li key={index} className="flex items-start gap-2.5">
                     <svg 
@@ -202,12 +218,30 @@ const Billing = () => {
                         d="M5 13l4 4L19 7" 
                       />
                     </svg>
-                    <span className="text-slate-300 text-sm">
-                      {feature}
-                    </span>
+                    <div className="flex flex-col">
+                      <span className="text-slate-300 text-sm">
+                        {feature}
+                      </span>
+                      {feature.includes('AI Insight Credits') && plan.creditNote && (
+                        <span className="text-xs text-slate-500 mt-0.5">
+                          ({plan.creditNote})
+                        </span>
+                      )}
+                    </div>
                   </li>
                 ))}
               </ul>
+              
+              {/* Simulation Note */}
+              {plan.simulationNote && (
+                <div className={`text-xs mb-4 px-3 py-2 rounded-lg ${
+                  plan.name === 'Starter' 
+                    ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' 
+                    : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                }`}>
+                  {plan.simulationNote}
+                </div>
+              )}
 
               {/* CTA Button */}
               <button
@@ -256,19 +290,19 @@ const Billing = () => {
         <div className="grid md:grid-cols-2 gap-6">
           <div>
             <h4 className="text-white font-medium mb-1.5">
-              Can I change plans later?
+              What are AI Insight Credits?
             </h4>
             <p className="text-slate-400 text-sm leading-relaxed">
-              Yes. Upgrade or downgrade anytime with prorated billing.
+              1 pricing analysis = 1 credit. 1 pricing simulation = 1 credit. Credits are shared between analyses and simulations each month.
             </p>
           </div>
 
           <div>
             <h4 className="text-white font-medium mb-1.5">
-              What payment methods do you accept?
+              Can I change plans later?
             </h4>
             <p className="text-slate-400 text-sm leading-relaxed">
-              All major credit cards and SEPA transfers via Stripe.
+              Yes. Upgrade or downgrade anytime with prorated billing.
             </p>
           </div>
 
@@ -283,10 +317,10 @@ const Billing = () => {
 
           <div>
             <h4 className="text-white font-medium mb-1.5">
-              Do you offer annual billing?
+              What payment methods do you accept?
             </h4>
             <p className="text-slate-400 text-sm leading-relaxed">
-              Yes. Save 20% with annual plans (coming soon).
+              All major credit cards and SEPA transfers via Stripe.
             </p>
           </div>
         </div>

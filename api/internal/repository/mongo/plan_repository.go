@@ -78,6 +78,23 @@ func (r *PlanRepository) GetByID(ctx context.Context, id primitive.ObjectID) (*m
 	return &plan, nil
 }
 
+// GetByIDAndUser retrieves a plan by ID and ensures it belongs to the specified user.
+func (r *PlanRepository) GetByIDAndUser(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID) (*model.Plan, error) {
+	var plan model.Plan
+	filter := bson.M{
+		"_id":     id,
+		"user_id": userID,
+	}
+	err := r.collection.FindOne(ctx, filter).Decode(&plan)
+	if err == mongo.ErrNoDocuments {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &plan, nil
+}
+
 // DeleteByIDAndUser deletes a plan by ID, ensuring it belongs to the specified user.
 func (r *PlanRepository) DeleteByIDAndUser(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID) error {
 	filter := bson.M{

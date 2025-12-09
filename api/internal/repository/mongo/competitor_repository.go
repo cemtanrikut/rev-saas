@@ -97,4 +97,31 @@ func (r *CompetitorRepository) DeleteByIDAndUser(ctx context.Context, id primiti
 	return nil
 }
 
+// UpdateByIDAndUser updates a competitor by ID, ensuring it belongs to the specified user.
+func (r *CompetitorRepository) UpdateByIDAndUser(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID, update *model.Competitor) error {
+	filter := bson.M{
+		"_id":     id,
+		"user_id": userID,
+	}
+
+	updateDoc := bson.M{
+		"$set": bson.M{
+			"name":  update.Name,
+			"url":   update.URL,
+			"plans": update.Plans,
+		},
+	}
+
+	res, err := r.collection.UpdateOne(ctx, filter, updateDoc)
+	if err != nil {
+		return err
+	}
+
+	if res.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+
+	return nil
+}
+
 
