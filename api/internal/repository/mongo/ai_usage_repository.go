@@ -90,12 +90,14 @@ func (r *AIUsageRepository) GetUsageByUser(ctx context.Context, userID primitive
 
 // ResetCredits resets the used credits for a user in a specific month to 0.
 // This is called when a subscription renews (invoice.paid).
+// Uses upsert to create the record if it doesn't exist.
 func (r *AIUsageRepository) ResetCredits(ctx context.Context, userIDStr string, monthKey string) error {
 	userID, err := primitive.ObjectIDFromHex(userIDStr)
 	if err != nil {
 		return err
 	}
 
+	now := time.Now()
 	filter := bson.M{
 		"user_id":   userID,
 		"month_key": monthKey,
@@ -104,11 +106,17 @@ func (r *AIUsageRepository) ResetCredits(ctx context.Context, userIDStr string, 
 	update := bson.M{
 		"$set": bson.M{
 			"used_credits": 0,
-			"updated_at":   time.Now(),
+			"updated_at":   now,
+		},
+		"$setOnInsert": bson.M{
+			"user_id":    userID,
+			"month_key":  monthKey,
+			"created_at": now,
 		},
 	}
 
-	_, err = r.collection.UpdateOne(ctx, filter, update)
+	opts := options.Update().SetUpsert(true)
+	_, err = r.collection.UpdateOne(ctx, filter, update, opts)
 	return err
 }
 

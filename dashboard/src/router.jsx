@@ -111,6 +111,10 @@ export const router = createBrowserRouter([
       {
         path: 'settings/billing',
         element: <Billing />
+      },
+      {
+        path: 'billing',
+        element: <Billing />
       }
     ]
   }

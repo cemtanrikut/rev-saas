@@ -90,3 +90,16 @@ func (r *UserRepository) Update(ctx context.Context, user *model.User) error {
 	return err
 }
 
+// UpdatePlan updates only the user's plan field.
+func (r *UserRepository) UpdatePlan(ctx context.Context, userID primitive.ObjectID, plan string) error {
+	filter := bson.M{"_id": userID}
+	update := bson.M{
+		"$set": bson.M{
+			"plan": plan,
+		},
+	}
+
+	_, err := r.collection.UpdateOne(ctx, filter, update)
+	return err
+}
+

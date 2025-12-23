@@ -6,6 +6,8 @@ import (
 	"log"
 	"os"
 	"strings"
+
+	"github.com/joho/godotenv"
 )
 
 // Config holds all configuration for the application.
@@ -39,7 +41,15 @@ type Config struct {
 }
 
 // Load reads configuration from environment variables with sensible defaults.
+// It first tries to load a .env file if present (for local development).
 func Load() *Config {
+	// Load .env file if it exists (ignore error if file doesn't exist)
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found, using environment variables")
+	} else {
+		log.Println("Loaded configuration from .env file")
+	}
+
 	encKeyStr := getEnv("ENCRYPTION_KEY", "")
 	var encKey []byte
 	if encKeyStr != "" {

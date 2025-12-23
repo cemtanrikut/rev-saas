@@ -359,6 +359,9 @@ func (s *BillingService) handleSubscriptionCreatedOrUpdated(ctx context.Context,
 		return err
 	}
 
+	log.Printf("[billing] subscription event: id=%s customer=%s status=%s period_end=%d",
+		subscription.ID, subscription.Customer, subscription.Status, subscription.CurrentPeriodEnd)
+
 	// Get price ID from first item
 	var priceID string
 	if len(subscription.Items.Data) > 0 {
@@ -387,6 +390,12 @@ func (s *BillingService) handleSubscriptionCreatedOrUpdated(ctx context.Context,
 		return nil // Don't fail, just log
 	}
 
+	// Parse current_period_end
+	var periodEnd time.Time
+	if subscription.CurrentPeriodEnd > 0 {
+		periodEnd = time.Unix(subscription.CurrentPeriodEnd, 0)
+	}
+
 	// Upsert subscription
 	sub := &model.BillingSubscription{
 		UserID:               userID,
@@ -396,15 +405,20 @@ func (s *BillingService) handleSubscriptionCreatedOrUpdated(ctx context.Context,
 		PlanKey:              planKey,
 		Status:               model.SubscriptionStatus(subscription.Status),
 		CancelAtPeriodEnd:    subscription.CancelAtPeriodEnd,
-		CurrentPeriodEnd:     time.Unix(subscription.CurrentPeriodEnd, 0),
+		CurrentPeriodEnd:     periodEnd,
 	}
 
 	if err := s.billingRepo.Upsert(ctx, sub); err != nil {
 		return fmt.Errorf("failed to upsert subscription: %w", err)
 	}
 
-	log.Printf("[billing] subscription upserted: user=%s plan=%s status=%s",
-		userID.Hex(), planKey, subscription.Status)
+	// Update user's plan field
+	if err := s.userRepo.UpdatePlan(ctx, userID, string(planKey)); err != nil {
+		log.Printf("[billing] warning: failed to update user plan: %v", err)
+	}
+
+	log.Printf("[billing] subscription upserted: user=%s plan=%s status=%s period_end=%s",
+		userID.Hex(), planKey, subscription.Status, periodEnd.Format(time.RFC3339))
 
 	return nil
 }
@@ -437,6 +451,11 @@ func (s *BillingService) handleSubscriptionDeleted(ctx context.Context, data jso
 
 	if err := s.billingRepo.Upsert(ctx, existingSub); err != nil {
 		return fmt.Errorf("failed to update canceled subscription: %w", err)
+	}
+
+	// Update user's plan to free
+	if err := s.userRepo.UpdatePlan(ctx, existingSub.UserID, string(model.PlanKeyFree)); err != nil {
+		log.Printf("[billing] warning: failed to update user plan to free: %v", err)
 	}
 
 	log.Printf("[billing] subscription canceled: user=%s", existingSub.UserID.Hex())
