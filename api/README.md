@@ -7,6 +7,31 @@ Go backend for the Revalyze SaaS application.
 - Go 1.21+
 - MongoDB (local or remote)
 
+## Environment Separation
+
+This project supports three environments: **local**, **staging**, and **production**.
+
+| Environment | APP_ENV | Database | Stripe Keys |
+|-------------|---------|----------|-------------|
+| Local | `local` | `rev_saas` | `sk_test_*` |
+| Staging | `staging` | `rev_saas_staging` | `sk_test_*` |
+| Production | `production` | `rev_saas_prod` | `sk_live_*` |
+
+For detailed documentation, see [Environment Separation Guide](../docs/ENVIRONMENTS.md).
+
+### Quick Start
+
+```bash
+# Copy the template for local development
+cp env-templates/local.env.template .env.local
+
+# Edit with your values
+nano .env.local
+
+# Run the server (defaults to APP_ENV=local)
+go run cmd/server/main.go
+```
+
 ## Project Structure
 
 ```
@@ -43,9 +68,10 @@ The API uses environment variables for configuration:
 
 | Variable        | Default                       | Description           |
 |-----------------|-------------------------------|-----------------------|
+| `APP_ENV`       | `local`                       | Environment: `local`, `staging`, `production` |
 | `APP_PORT`      | `8080`                        | HTTP server port      |
 | `MONGO_URI`     | `mongodb://localhost:27017`   | MongoDB connection URI|
-| `MONGO_DB_NAME` | `rev_saas`                    | MongoDB database name |
+| `MONGO_DB_NAME` | `rev_saas`                    | Base MongoDB database name (suffixed by env) |
 | `JWT_SECRET`    | `dev-secret-change-me`        | JWT signing secret    |
 | `OPENAI_API_KEY`| -                             | OpenAI API key        |
 

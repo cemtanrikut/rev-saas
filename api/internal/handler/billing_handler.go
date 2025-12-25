@@ -156,9 +156,10 @@ func (h *BillingHandler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 
 	// Parse event
 	var event struct {
-		ID   string `json:"id"`
-		Type string `json:"type"`
-		Data struct {
+		ID       string `json:"id"`
+		Type     string `json:"type"`
+		Livemode bool   `json:"livemode"`
+		Data     struct {
 			Object json.RawMessage `json:"object"`
 		} `json:"data"`
 	}
@@ -168,7 +169,17 @@ func (h *BillingHandler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[billing] received webhook: type=%s id=%s", event.Type, event.ID)
+	log.Printf("[billing] received webhook: type=%s id=%s livemode=%v", event.Type, event.ID, event.Livemode)
+
+	// CRITICAL: Validate livemode matches environment
+	// Production MUST only process live events, staging/local MUST only process test events
+	expectedLivemode := h.cfg.Environment.IsProduction()
+	if event.Livemode != expectedLivemode {
+		log.Printf("[billing] REJECTED webhook: livemode mismatch - event.livemode=%v, expected=%v (env=%s)",
+			event.Livemode, expectedLivemode, h.cfg.Environment)
+		http.Error(w, "livemode mismatch", http.StatusBadRequest)
+		return
+	}
 
 	// Process event
 	if err := h.billingService.HandleWebhookEvent(r.Context(), event.ID, event.Type, event.Data.Object); err != nil {
@@ -232,4 +243,6 @@ func (h *BillingHandler) verifyStripeSignature(payload []byte, sigHeader string)
 
 	return false
 }
+
+
 

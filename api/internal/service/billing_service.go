@@ -24,6 +24,7 @@ const (
 	stripeCustomersURL       = "https://api.stripe.com/v1/customers"
 	stripeCheckoutSessionURL = "https://api.stripe.com/v1/checkout/sessions"
 	stripePortalSessionURL   = "https://api.stripe.com/v1/billing_portal/sessions"
+	stripeSubscriptionsURL   = "https://api.stripe.com/v1/subscriptions"
 )
 
 // Billing errors
@@ -86,13 +87,22 @@ func (s *BillingService) GetBillingStatus(ctx context.Context, userID string) (*
 		}, nil
 	}
 
+	// Only return period end for active/trialing subscriptions
+	// For canceled subscriptions, don't show renewal date
 	var periodEnd *time.Time
-	if !sub.CurrentPeriodEnd.IsZero() {
+	isActiveOrTrialing := sub.Status == model.SubscriptionStatusActive || sub.Status == model.SubscriptionStatusTrialing
+	if !sub.CurrentPeriodEnd.IsZero() && isActiveOrTrialing {
 		periodEnd = &sub.CurrentPeriodEnd
 	}
 
+	// For canceled subscriptions, return free plan
+	planKey := sub.PlanKey
+	if sub.Status == model.SubscriptionStatusCanceled {
+		planKey = model.PlanKeyFree
+	}
+
 	return &model.BillingStatusResponse{
-		PlanKey:              sub.PlanKey,
+		PlanKey:              planKey,
 		Status:               sub.Status,
 		CancelAtPeriodEnd:    sub.CancelAtPeriodEnd,
 		CurrentPeriodEnd:     periodEnd,
@@ -102,6 +112,7 @@ func (s *BillingService) GetBillingStatus(ctx context.Context, userID string) (*
 }
 
 // CreateCheckoutSession creates a Stripe Checkout session for subscription purchase.
+// If user already has an active subscription, it updates the existing one instead.
 func (s *BillingService) CreateCheckoutSession(ctx context.Context, userID, userEmail, planKey string) (string, error) {
 	if !s.IsConfigured() {
 		return "", ErrBillingNotConfigured
@@ -118,13 +129,26 @@ func (s *BillingService) CreateCheckoutSession(ctx context.Context, userID, user
 		return "", fmt.Errorf("invalid user id: %w", err)
 	}
 
+	// Check if user already has an active subscription
+	existingSub, err := s.billingRepo.GetByUserID(ctx, uid)
+	if err != nil {
+		return "", fmt.Errorf("failed to check existing subscription: %w", err)
+	}
+
+	// If user has an active subscription, update it instead of creating new one
+	if existingSub != nil && existingSub.StripeSubscriptionID != "" && existingSub.Status == model.SubscriptionStatusActive {
+		log.Printf("[billing] user %s has active subscription %s, updating instead of creating new",
+			userID, existingSub.StripeSubscriptionID)
+		return s.updateSubscription(ctx, existingSub.StripeSubscriptionID, priceID, userID)
+	}
+
 	// Get or create Stripe customer
 	customerID, err := s.getOrCreateStripeCustomer(ctx, uid, userEmail)
 	if err != nil {
 		return "", fmt.Errorf("failed to get/create Stripe customer: %w", err)
 	}
 
-	// Create Checkout Session
+	// Create Checkout Session for new subscription
 	data := url.Values{}
 	data.Set("customer", customerID)
 	data.Set("mode", "subscription")
@@ -164,6 +188,76 @@ func (s *BillingService) CreateCheckoutSession(ctx context.Context, userID, user
 	}
 
 	return result.URL, nil
+}
+
+// updateSubscription updates an existing Stripe subscription to a new price.
+// Returns the success URL directly since no checkout is needed.
+func (s *BillingService) updateSubscription(ctx context.Context, subscriptionID, newPriceID, userID string) (string, error) {
+	// First, get the current subscription to find the subscription item ID
+	getReq, err := http.NewRequestWithContext(ctx, "GET", stripeSubscriptionsURL+"/"+subscriptionID, nil)
+	if err != nil {
+		return "", err
+	}
+	getReq.SetBasicAuth(s.cfg.StripeBillingSecretKey, "")
+
+	getResp, err := http.DefaultClient.Do(getReq)
+	if err != nil {
+		return "", err
+	}
+	defer getResp.Body.Close()
+
+	if getResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(getResp.Body)
+		return "", fmt.Errorf("failed to get subscription: %s", string(body))
+	}
+
+	var subscription struct {
+		Items struct {
+			Data []struct {
+				ID string `json:"id"`
+			} `json:"data"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(getResp.Body).Decode(&subscription); err != nil {
+		return "", err
+	}
+
+	if len(subscription.Items.Data) == 0 {
+		return "", fmt.Errorf("subscription has no items")
+	}
+
+	subscriptionItemID := subscription.Items.Data[0].ID
+
+	// Update the subscription with the new price
+	data := url.Values{}
+	data.Set("items[0][id]", subscriptionItemID)
+	data.Set("items[0][price]", newPriceID)
+	data.Set("proration_behavior", "create_prorations") // Prorate the change
+	data.Set("metadata[user_id]", userID)
+
+	updateReq, err := http.NewRequestWithContext(ctx, "POST", stripeSubscriptionsURL+"/"+subscriptionID, strings.NewReader(data.Encode()))
+	if err != nil {
+		return "", err
+	}
+
+	updateReq.SetBasicAuth(s.cfg.StripeBillingSecretKey, "")
+	updateReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	updateResp, err := http.DefaultClient.Do(updateReq)
+	if err != nil {
+		return "", err
+	}
+	defer updateResp.Body.Close()
+
+	if updateResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(updateResp.Body)
+		return "", fmt.Errorf("failed to update subscription: %s", string(body))
+	}
+
+	log.Printf("[billing] subscription %s updated to price %s for user %s", subscriptionID, newPriceID, userID)
+
+	// Return success URL - the webhook will handle the database update
+	return s.cfg.StripeBillingSuccessURL, nil
 }
 
 // CreatePortalSession creates a Stripe Customer Portal session.
@@ -345,12 +439,14 @@ func (s *BillingService) handleSubscriptionCreatedOrUpdated(ctx context.Context,
 		Customer           string `json:"customer"`
 		Status             string `json:"status"`
 		CancelAtPeriodEnd  bool   `json:"cancel_at_period_end"`
+		CancelAt           int64  `json:"cancel_at"` // Stripe may use this instead of cancel_at_period_end
 		CurrentPeriodEnd   int64  `json:"current_period_end"`
 		Items              struct {
 			Data []struct {
 				Price struct {
 					ID string `json:"id"`
 				} `json:"price"`
+				CurrentPeriodEnd int64 `json:"current_period_end"` // Also check items level
 			} `json:"data"`
 		} `json:"items"`
 		Metadata map[string]string `json:"metadata"`
@@ -359,8 +455,15 @@ func (s *BillingService) handleSubscriptionCreatedOrUpdated(ctx context.Context,
 		return err
 	}
 
-	log.Printf("[billing] subscription event: id=%s customer=%s status=%s period_end=%d",
-		subscription.ID, subscription.Customer, subscription.Status, subscription.CurrentPeriodEnd)
+	// Fallback: if root level current_period_end is 0, try to get from items
+	if subscription.CurrentPeriodEnd == 0 && len(subscription.Items.Data) > 0 {
+		subscription.CurrentPeriodEnd = subscription.Items.Data[0].CurrentPeriodEnd
+		log.Printf("[billing] using current_period_end from items: %d", subscription.CurrentPeriodEnd)
+	}
+
+	log.Printf("[billing] subscription event: id=%s customer=%s status=%s period_end=%d cancel_at_period_end=%v cancel_at=%d",
+		subscription.ID, subscription.Customer, subscription.Status, subscription.CurrentPeriodEnd, 
+		subscription.CancelAtPeriodEnd, subscription.CancelAt)
 
 	// Get price ID from first item
 	var priceID string
@@ -373,16 +476,20 @@ func (s *BillingService) handleSubscriptionCreatedOrUpdated(ctx context.Context,
 
 	// Try to find user ID from metadata or existing subscription
 	var userID primitive.ObjectID
+	var existingSub *model.BillingSubscription
 	if uid, ok := subscription.Metadata["user_id"]; ok {
 		userID, _ = primitive.ObjectIDFromHex(uid)
 	}
 
 	// If no user ID in metadata, try to find by customer ID
 	if userID.IsZero() {
-		existingSub, _ := s.billingRepo.GetByStripeCustomerID(ctx, subscription.Customer)
+		existingSub, _ = s.billingRepo.GetByStripeCustomerID(ctx, subscription.Customer)
 		if existingSub != nil {
 			userID = existingSub.UserID
 		}
+	} else {
+		// Get existing subscription to check for plan change
+		existingSub, _ = s.billingRepo.GetByUserID(ctx, userID)
 	}
 
 	if userID.IsZero() {
@@ -390,11 +497,22 @@ func (s *BillingService) handleSubscriptionCreatedOrUpdated(ctx context.Context,
 		return nil // Don't fail, just log
 	}
 
+	// Check if plan changed - if so, reset credits
+	oldPlanKey := model.PlanKeyFree
+	if existingSub != nil {
+		oldPlanKey = existingSub.PlanKey
+	}
+	planChanged := oldPlanKey != planKey
+
 	// Parse current_period_end
 	var periodEnd time.Time
 	if subscription.CurrentPeriodEnd > 0 {
 		periodEnd = time.Unix(subscription.CurrentPeriodEnd, 0)
 	}
+
+	// Determine if subscription is scheduled for cancellation
+	// Stripe may use either cancel_at_period_end OR cancel_at
+	cancelScheduled := subscription.CancelAtPeriodEnd || subscription.CancelAt > 0
 
 	// Upsert subscription
 	sub := &model.BillingSubscription{
@@ -404,7 +522,7 @@ func (s *BillingService) handleSubscriptionCreatedOrUpdated(ctx context.Context,
 		StripePriceID:        priceID,
 		PlanKey:              planKey,
 		Status:               model.SubscriptionStatus(subscription.Status),
-		CancelAtPeriodEnd:    subscription.CancelAtPeriodEnd,
+		CancelAtPeriodEnd:    cancelScheduled,
 		CurrentPeriodEnd:     periodEnd,
 	}
 
@@ -415,6 +533,17 @@ func (s *BillingService) handleSubscriptionCreatedOrUpdated(ctx context.Context,
 	// Update user's plan field
 	if err := s.userRepo.UpdatePlan(ctx, userID, string(planKey)); err != nil {
 		log.Printf("[billing] warning: failed to update user plan: %v", err)
+	}
+
+	// Reset credits when plan changes (upgrade or downgrade)
+	if planChanged {
+		monthKey := time.Now().Format("2006-01")
+		if err := s.aiUsageRepo.ResetCredits(ctx, userID.Hex(), monthKey); err != nil {
+			log.Printf("[billing] warning: failed to reset credits on plan change: %v", err)
+		} else {
+			log.Printf("[billing] credits reset on plan change: user=%s old_plan=%s new_plan=%s",
+				userID.Hex(), oldPlanKey, planKey)
+		}
 	}
 
 	log.Printf("[billing] subscription upserted: user=%s plan=%s status=%s period_end=%s",

@@ -1,0 +1,239 @@
+# =============================================================================
+# CI/CD Pipeline with Environment Separation
+# =============================================================================
+# Branch → Environment Mapping:
+#   - main branch    → production environment
+#   - develop branch → staging environment
+#
+# Each environment has its own secrets configured in GitHub Settings
+
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+env:
+  GO_VERSION: '1.21'
+  NODE_VERSION: '20'
+
+jobs:
+  # ==========================================================================
+  # Determine Environment
+  # ==========================================================================
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.set-env.outputs.environment }}
+      should_deploy: ${{ steps.set-env.outputs.should_deploy }}
+    steps:
+      - name: Determine Environment
+        id: set-env
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "environment=production" >> $GITHUB_OUTPUT
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+            echo "environment=staging" >> $GITHUB_OUTPUT
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+          else
+            echo "environment=staging" >> $GITHUB_OUTPUT
+            echo "should_deploy=false" >> $GITHUB_OUTPUT
+          fi
+
+  # ==========================================================================
+  # Backend Tests
+  # ==========================================================================
+  backend-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Download Dependencies
+        run: go mod download
+
+      - name: Run Tests
+        run: go test -v -race ./...
+
+      - name: Build
+        run: go build -o server ./cmd/server
+
+  # ==========================================================================
+  # Frontend Tests
+  # ==========================================================================
+  frontend-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint --if-present
+
+      - name: Build (Staging)
+        if: github.ref != 'refs/heads/main'
+        run: npm run build
+        env:
+          VITE_API_URL: https://staging-api.revalyze.com
+          VITE_STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}
+          VITE_APP_ENV: staging
+
+      - name: Build (Production)
+        if: github.ref == 'refs/heads/main'
+        run: npm run build
+        env:
+          VITE_API_URL: https://api.revalyze.com
+          VITE_STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}
+          VITE_APP_ENV: production
+
+  # ==========================================================================
+  # Deploy to Staging (develop branch only)
+  # ==========================================================================
+  deploy-staging:
+    needs: [setup, backend-test, frontend-test]
+    if: needs.setup.outputs.environment == 'staging' && needs.setup.outputs.should_deploy == 'true'
+    runs-on: ubuntu-latest
+    environment: staging
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Staging Secrets
+        run: |
+          # Ensure we're using TEST keys for staging
+          if [[ "${{ secrets.STRIPE_SECRET_KEY }}" == sk_live_* ]]; then
+            echo "ERROR: Staging environment cannot use sk_live_* keys!"
+            exit 1
+          fi
+          if [[ "${{ secrets.STRIPE_BILLING_SECRET_KEY }}" == sk_live_* ]]; then
+            echo "ERROR: Staging environment cannot use sk_live_* billing keys!"
+            exit 1
+          fi
+          echo "✓ Staging secrets validated (using test keys)"
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build Backend
+        working-directory: api
+        run: go build -o server ./cmd/server
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Build Frontend
+        working-directory: dashboard
+        run: |
+          npm ci
+          npm run build
+        env:
+          VITE_API_URL: https://staging-api.revalyze.com
+          VITE_STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}
+          VITE_APP_ENV: staging
+
+      # TODO: Add your staging deployment steps here
+      # Examples:
+      # - Deploy to Cloud Run, ECS, Kubernetes, etc.
+      # - Upload to S3/CloudFront, Vercel, Netlify, etc.
+      - name: Deploy to Staging
+        run: |
+          echo "🚀 Deploying to STAGING environment..."
+          echo "Backend: api/server"
+          echo "Frontend: dashboard/dist/"
+          # Add your deployment commands here
+
+  # ==========================================================================
+  # Deploy to Production (main branch only)
+  # ==========================================================================
+  deploy-production:
+    needs: [setup, backend-test, frontend-test]
+    if: needs.setup.outputs.environment == 'production' && needs.setup.outputs.should_deploy == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false  # Never cancel production deploys
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Production Secrets
+        run: |
+          # Ensure we're using LIVE keys for production
+          if [[ "${{ secrets.STRIPE_SECRET_KEY }}" == sk_test_* ]]; then
+            echo "ERROR: Production environment requires sk_live_* keys!"
+            exit 1
+          fi
+          if [[ "${{ secrets.STRIPE_BILLING_SECRET_KEY }}" == sk_test_* ]]; then
+            echo "ERROR: Production environment requires sk_live_* billing keys!"
+            exit 1
+          fi
+          echo "✓ Production secrets validated (using live keys)"
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build Backend
+        working-directory: api
+        run: go build -o server ./cmd/server
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Build Frontend
+        working-directory: dashboard
+        run: |
+          npm ci
+          npm run build
+        env:
+          VITE_API_URL: https://api.revalyze.com
+          VITE_STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}
+          VITE_APP_ENV: production
+
+      # TODO: Add your production deployment steps here
+      - name: Deploy to Production
+        run: |
+          echo "🚀 Deploying to PRODUCTION environment..."
+          echo "Backend: api/server"
+          echo "Frontend: dashboard/dist/"
+          # Add your deployment commands here
+

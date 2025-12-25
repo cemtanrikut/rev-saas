@@ -6,12 +6,13 @@ import (
 	"log"
 	"os"
 	"strings"
-
-	"github.com/joho/godotenv"
 )
 
 // Config holds all configuration for the application.
 type Config struct {
+	// Environment
+	Environment Environment
+
 	AppPort      string
 	MongoURI     string
 	MongoDB      string
@@ -41,14 +42,13 @@ type Config struct {
 }
 
 // Load reads configuration from environment variables with sensible defaults.
-// It first tries to load a .env file if present (for local development).
+// It loads the appropriate .env file based on APP_ENV:
+//   - APP_ENV=local      -> .env.local (fallback: .env)
+//   - APP_ENV=staging    -> .env.staging
+//   - APP_ENV=production -> .env.production
 func Load() *Config {
-	// Load .env file if it exists (ignore error if file doesn't exist)
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, using environment variables")
-	} else {
-		log.Println("Loaded configuration from .env file")
-	}
+	// Load environment-specific .env file
+	env := LoadEnvFile()
 
 	encKeyStr := getEnv("ENCRYPTION_KEY", "")
 	var encKey []byte
@@ -67,10 +67,16 @@ func Load() *Config {
 	// Stripe Billing secret key - fallback to main secret key if not set separately
 	stripeBillingSecretKey := getEnv("STRIPE_BILLING_SECRET_KEY", stripeSecretKey)
 
+	// Determine MongoDB database name based on environment
+	baseDBName := getEnv("MONGO_DB_NAME", "rev_saas")
+	mongoDB := GetMongoDBName(env, baseDBName)
+
 	cfg := &Config{
-		AppPort:      getEnv("APP_PORT", "8080"),
-		MongoURI:     getEnv("MONGO_URI", "mongodb://localhost:27017"),
-		MongoDB:      getEnv("MONGO_DB_NAME", "rev_saas"),
+		Environment: env,
+
+		AppPort:  getEnv("APP_PORT", "8080"),
+		MongoURI: getEnv("MONGO_URI", "mongodb://localhost:27017"),
+		MongoDB:  mongoDB,
 		JWTSecret:    getEnv("JWT_SECRET", "dev-secret-change-me"),
 		OpenAIAPIKey: getEnv("OPENAI_API_KEY", ""),
 
@@ -104,8 +110,8 @@ func Load() *Config {
 		}
 	}
 
-	log.Printf("Config loaded: port=%s, mongo_db=%s, openai_enabled=%v, stripe_mode=%s",
-		cfg.AppPort, cfg.MongoDB, cfg.OpenAIAPIKey != "", stripeMode)
+	log.Printf("Config loaded: env=%s, port=%s, mongo_db=%s, openai_enabled=%v, stripe_mode=%s",
+		env, cfg.AppPort, cfg.MongoDB, cfg.OpenAIAPIKey != "", stripeMode)
 
 	return cfg
 }
@@ -218,6 +224,27 @@ func (c *Config) ValidateStripeBillingConfig() error {
 // IsBillingEnabled returns true if Stripe Billing is configured.
 func (c *Config) IsBillingEnabled() bool {
 	return c.StripeBillingSecretKey != "" && c.StripeWebhookSecret != ""
+}
+
+// ValidateEnvironment validates that Stripe keys match the current environment.
+// This should be called during startup to fail fast with clear error messages.
+func (c *Config) ValidateEnvironment() error {
+	// Validate Connect keys
+	if err := ValidateEnvironmentKeys(c.Environment, c.StripeSecretKey, ""); err != nil {
+		return fmt.Errorf("stripe connect: %w", err)
+	}
+
+	// Validate Billing keys
+	if err := ValidateEnvironmentKeys(c.Environment, c.StripeBillingSecretKey, c.StripeWebhookSecret); err != nil {
+		return fmt.Errorf("stripe billing: %w", err)
+	}
+
+	return nil
+}
+
+// IsLiveMode returns true if the application is in live mode (production with live keys).
+func (c *Config) IsLiveMode() bool {
+	return c.Environment.IsProduction() && c.StripeLivemode
 }
 
 // GetPriceIDForPlan returns the Stripe price ID for a given plan key.

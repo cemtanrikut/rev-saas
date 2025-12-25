@@ -21,6 +21,12 @@ func main() {
 	// Load configuration
 	cfg := config.Load()
 
+	// Validate environment-specific configuration (fail fast)
+	// This ensures production uses live keys and staging/local use test keys
+	if err := cfg.ValidateEnvironment(); err != nil {
+		log.Fatalf("Environment validation error: %v", err)
+	}
+
 	// Validate Stripe configuration (fail fast with clear error messages)
 	if err := cfg.ValidateStripeConfig(); err != nil {
 		log.Fatalf("Stripe configuration error: %v", err)
