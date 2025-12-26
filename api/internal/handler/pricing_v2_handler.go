@@ -164,3 +164,36 @@ func (h *PricingV2Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	// For now, just return success - individual delete can be added later
 	writeJSONPV2(w, map[string]string{"status": "deleted"}, http.StatusOK)
 }
+
+// ExtractFromText handles POST /api/pricing-v2/extract-from-text (paste mode fallback)
+func (h *PricingV2Handler) ExtractFromText(w http.ResponseWriter, r *http.Request) {
+	var req model.PricingExtractFromTextRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONPV2(w, model.PricingExtractFromTextResponse{
+			Error: "invalid request body",
+		}, http.StatusBadRequest)
+		return
+	}
+
+	if req.MonthlyText == "" && req.YearlyText == "" {
+		writeJSONPV2(w, model.PricingExtractFromTextResponse{
+			Error: "at least one of monthly_text or yearly_text is required",
+		}, http.StatusBadRequest)
+		return
+	}
+
+	result, err := h.service.ExtractFromText(r.Context(), req)
+	if err != nil {
+		log.Printf("[pricing-v2-handler] extract-from-text error: %v", err)
+		writeJSONPV2(w, model.PricingExtractFromTextResponse{
+			Error: err.Error(),
+		}, http.StatusInternalServerError)
+		return
+	}
+
+	status := http.StatusOK
+	if result.Error != "" {
+		status = http.StatusBadRequest
+	}
+	writeJSONPV2(w, result, status)
+}

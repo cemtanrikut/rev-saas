@@ -103,3 +103,18 @@ type SavedPricingV2Response struct {
 	Plans []PricingV2Plan `json:"plans"`
 	Count int             `json:"count"`
 }
+
+// PricingExtractFromTextRequest is the request for extract-from-text endpoint (paste mode)
+type PricingExtractFromTextRequest struct {
+	MonthlyText string `json:"monthly_text"`
+	YearlyText  string `json:"yearly_text"`
+	WebsiteURL  string `json:"website_url,omitempty"` // optional context
+}
+
+// PricingExtractFromTextResponse is the response from extract-from-text endpoint
+type PricingExtractFromTextResponse struct {
+	Plans           []ExtractedPlan `json:"plans"`
+	DetectedPeriods []string        `json:"detected_periods"`
+	Warnings        []string        `json:"warnings,omitempty"`
+	Error           string          `json:"error,omitempty"`
+}

@@ -350,6 +350,7 @@ export const competitorsV2Api = {
 export const pricingV2Api = {
   discover: (data) => postJson('/api/pricing-v2/discover', data),
   extract: (data) => postJson('/api/pricing-v2/extract', data),
+  extractFromText: (data) => postJson('/api/pricing-v2/extract-from-text', data),
   save: (data) => postJson('/api/pricing-v2/save', data),
   list: () => getJson('/api/pricing-v2'),
   delete: (id) => deleteJson(`/api/pricing-v2/${id}`),

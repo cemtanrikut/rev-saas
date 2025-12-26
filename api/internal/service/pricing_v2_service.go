@@ -1097,6 +1097,220 @@ func (s *PricingV2Service) GetSavedPlans(ctx context.Context, userID string) (*m
 	return &model.SavedPricingV2Response{Plans: plans, Count: len(plans)}, nil
 }
 
+// ExtractFromText extracts pricing from pasted text (paste mode fallback)
+func (s *PricingV2Service) ExtractFromText(ctx context.Context, req model.PricingExtractFromTextRequest) (*model.PricingExtractFromTextResponse, error) {
+	var warnings []string
+	
+	// Validate input
+	if req.MonthlyText == "" && req.YearlyText == "" {
+		return &model.PricingExtractFromTextResponse{
+			Error: "at least one of monthly_text or yearly_text is required",
+		}, nil
+	}
+
+	// Add warnings for empty inputs
+	if req.MonthlyText == "" {
+		warnings = append(warnings, "monthly_text_empty")
+	}
+	if req.YearlyText == "" {
+		warnings = append(warnings, "yearly_text_empty")
+	}
+
+	// Build combined content with clear section markers
+	var combinedContent strings.Builder
+	
+	if req.MonthlyText != "" {
+		combinedContent.WriteString("=== SNAPSHOT: MONTHLY BILLING MODE ===\n")
+		combinedContent.WriteString("(User-pasted text for monthly billing view)\n\n")
+		combinedContent.WriteString(req.MonthlyText)
+		combinedContent.WriteString("\n\n")
+	}
+	
+	if req.YearlyText != "" {
+		combinedContent.WriteString("=== SNAPSHOT: YEARLY/ANNUAL BILLING MODE ===\n")
+		combinedContent.WriteString("(User-pasted text for yearly billing view)\n\n")
+		combinedContent.WriteString(req.YearlyText)
+		combinedContent.WriteString("\n\n")
+	}
+
+	// Extract with LLM using the paste mode prompt
+	plans, llmWarnings, err := s.extractFromPastedText(ctx, combinedContent.String(), req.WebsiteURL)
+	if err != nil {
+		return &model.PricingExtractFromTextResponse{
+			Error:    fmt.Sprintf("extraction failed: %v", err),
+			Warnings: warnings,
+		}, nil
+	}
+
+	// Deduplicate plans
+	plans = s.deduplicatePlans(plans)
+
+	// Detect billing periods
+	periods := s.detectBillingPeriods(plans)
+
+	warnings = append(warnings, llmWarnings...)
+
+	return &model.PricingExtractFromTextResponse{
+		Plans:           plans,
+		DetectedPeriods: periods,
+		Warnings:        warnings,
+	}, nil
+}
+
+// Paste mode specific LLM prompt
+const pasteExtractionPrompt = `You are a pricing data extraction specialist. Extract pricing plan information from user-pasted text.
+
+IMPORTANT: The user has manually copied and pasted pricing text from their website. This text is the ONLY source of truth.
+
+STRICT RULES:
+1. ONLY extract information that is EXPLICITLY present in the pasted text
+2. If a field is not found, use null - NEVER guess or invent data
+3. EVIDENCE IS REQUIRED: Include exact text snippets from the pasted text for every extracted value
+4. The text is pre-labeled with billing mode (MONTHLY or YEARLY) - use this to set billing_period
+
+SNAPSHOT HANDLING:
+- If text is marked "SNAPSHOT: MONTHLY BILLING MODE", all plans from that section have billing_period: "monthly"
+- If text is marked "SNAPSHOT: YEARLY/ANNUAL BILLING MODE", all plans from that section have billing_period: "yearly"
+- Create SEPARATE plan entries for the same plan in different billing modes
+
+BILLING PERIOD RULES:
+- Plans from MONTHLY section → billing_period: "monthly"
+- Plans from YEARLY section → billing_period: "yearly"  
+- If yearly price shows monthly equivalent (e.g., "$10/mo billed annually"):
+  - billing_period: "yearly"
+  - monthly_equivalent_amount: 10
+  - annual_billed_amount: 120
+
+Output ONLY valid JSON in this exact format:
+{
+  "plans": [
+    {
+      "name": "Plan Name",
+      "price_amount": 19.00,
+      "price_string": "$19/mo",
+      "currency": "USD",
+      "price_frequency": "per_month",
+      "billing_period": "monthly",
+      "monthly_equivalent_amount": null,
+      "annual_billed_amount": null,
+      "included_units": [],
+      "features": ["Feature 1", "Feature 2"],
+      "evidence": {
+        "name_snippet": "exact text from pasted content",
+        "price_snippet": "exact text showing the price",
+        "units_snippet": "exact text showing included units",
+        "billing_evidence": "MONTHLY BILLING MODE section"
+      }
+    }
+  ],
+  "detected_billing_options": ["monthly", "yearly"],
+  "warnings": []
+}
+
+IMPORTANT:
+- Extract from BOTH monthly and yearly sections if both are provided
+- Currency: $ = USD, € = EUR, £ = GBP
+- If features are not in the pasted text, return empty array and add warning
+- DO NOT invent or guess any data - only extract what is explicitly written`
+
+// extractFromPastedText uses OpenAI to extract pricing from pasted text
+func (s *PricingV2Service) extractFromPastedText(ctx context.Context, content, websiteURL string) ([]model.ExtractedPlan, []string, error) {
+	if s.openAIKey == "" {
+		return nil, nil, fmt.Errorf("OpenAI API key not configured")
+	}
+
+	if len(content) > 50000 {
+		content = content[:50000] + "\n...[truncated]"
+	}
+
+	sourceInfo := "user-pasted text"
+	if websiteURL != "" {
+		sourceInfo = fmt.Sprintf("user-pasted text from %s", websiteURL)
+	}
+
+	userPrompt := fmt.Sprintf(`Extract pricing information from this %s.
+
+The user has manually copied and pasted this pricing text. Extract ONLY what is explicitly written.
+
+Pasted Content:
+%s`, sourceInfo, content)
+
+	reqBody := map[string]interface{}{
+		"model": "gpt-4o-mini",
+		"messages": []map[string]string{
+			{"role": "system", "content": pasteExtractionPrompt},
+			{"role": "user", "content": userPrompt},
+		},
+		"temperature": 0.1,
+		"max_tokens":  4000,
+	}
+
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.openai.com/v1/chat/completions", bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+s.openAIKey)
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var apiResp struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+
+	if err := json.Unmarshal(body, &apiResp); err != nil {
+		return nil, nil, err
+	}
+
+	if apiResp.Error.Message != "" {
+		return nil, nil, fmt.Errorf("OpenAI error: %s", apiResp.Error.Message)
+	}
+
+	if len(apiResp.Choices) == 0 {
+		return nil, nil, fmt.Errorf("no response from OpenAI")
+	}
+
+	response := strings.TrimSpace(apiResp.Choices[0].Message.Content)
+	response = strings.TrimPrefix(response, "```json")
+	response = strings.TrimPrefix(response, "```")
+	response = strings.TrimSuffix(response, "```")
+	response = strings.TrimSpace(response)
+
+	var result struct {
+		Plans    []model.ExtractedPlan `json:"plans"`
+		Warnings []string              `json:"warnings"`
+	}
+
+	if err := json.Unmarshal([]byte(response), &result); err != nil {
+		log.Printf("[pricing-v2] failed to parse paste LLM response: %v, response: %s", err, response)
+		return nil, []string{"parse_error"}, fmt.Errorf("failed to parse extraction result")
+	}
+
+	return result.Plans, result.Warnings, nil
+}
+
 // E) Updated LLM Extraction Prompt with dual snapshot support
 const extractionPrompt = `You are a pricing data extraction specialist. Extract pricing plan information from the provided website content.
 

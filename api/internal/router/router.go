@@ -82,6 +82,7 @@ func NewRouter(
 	// Pricing V2 (auto-import from website)
 	api.HandleFunc("/pricing-v2/discover", pricingV2Handler.Discover).Methods(http.MethodPost)
 	api.HandleFunc("/pricing-v2/extract", pricingV2Handler.Extract).Methods(http.MethodPost)
+	api.HandleFunc("/pricing-v2/extract-from-text", pricingV2Handler.ExtractFromText).Methods(http.MethodPost)
 	api.HandleFunc("/pricing-v2/save", pricingV2Handler.Save).Methods(http.MethodPost)
 	api.HandleFunc("/pricing-v2", pricingV2Handler.List).Methods(http.MethodGet)
 	api.HandleFunc("/pricing-v2/{id}", pricingV2Handler.Delete).Methods(http.MethodDelete)

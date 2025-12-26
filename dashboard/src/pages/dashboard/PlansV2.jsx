@@ -33,6 +33,12 @@ const PlansV2 = () => {
   // View state
   const [showManualInput, setShowManualInput] = useState(false);
   const [activeFilter, setActiveFilter] = useState('all');
+  
+  // Paste mode state
+  const [showPasteMode, setShowPasteMode] = useState(false);
+  const [monthlyText, setMonthlyText] = useState('');
+  const [yearlyText, setYearlyText] = useState('');
+  const [isPasteExtracting, setIsPasteExtracting] = useState(false);
 
   // Load saved plans on mount
   useEffect(() => {
@@ -124,6 +130,46 @@ const PlansV2 = () => {
       setExtractError(err.message || 'Extraction failed');
     } finally {
       setIsExtracting(false);
+    }
+  };
+
+  // Paste mode extraction
+  const handleExtractFromText = async () => {
+    if (!monthlyText.trim() && !yearlyText.trim()) {
+      setExtractError('Please paste at least one pricing text (monthly or yearly view)');
+      return;
+    }
+
+    setIsPasteExtracting(true);
+    setExtractError('');
+    setExtractedPlans([]);
+    setWarnings([]);
+    setSelectedPlans(new Set());
+
+    try {
+      const response = await pricingV2Api.extractFromText({
+        monthly_text: monthlyText.trim(),
+        yearly_text: yearlyText.trim(),
+        website_url: websiteUrl.trim() || undefined
+      });
+      
+      if (response.error) {
+        setExtractError(response.error);
+        return;
+      }
+
+      setPricingUrl('pasted-text');
+      setExtractedPlans(response.plans || []);
+      setDetectedPeriods(response.detected_periods || []);
+      setWarnings(response.warnings || []);
+      
+      // Auto-select all plans
+      const allIds = new Set(response.plans?.map((_, i) => i) || []);
+      setSelectedPlans(allIds);
+    } catch (err) {
+      setExtractError(err.message || 'Extraction from pasted text failed');
+    } finally {
+      setIsPasteExtracting(false);
     }
   };
 
@@ -313,6 +359,138 @@ const PlansV2 = () => {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Paste Mode Fallback Section */}
+      <div className="bg-slate-900/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-800">
+        <button
+          onClick={() => setShowPasteMode(!showPasteMode)}
+          className="w-full flex items-center justify-between text-left"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-amber-500/10 rounded-xl flex items-center justify-center">
+              <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-white">
+                Having trouble? Paste pricing text manually
+              </h3>
+              <p className="text-sm text-slate-400">
+                For dynamic monthly/yearly toggles that auto-import can't detect
+              </p>
+            </div>
+          </div>
+          <svg 
+            className={`w-5 h-5 text-slate-400 transition-transform ${showPasteMode ? 'rotate-180' : ''}`} 
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        {showPasteMode && (
+          <div className="mt-6 space-y-6">
+            <div className="bg-slate-800/30 rounded-xl p-4">
+              <p className="text-sm text-slate-300 mb-2">
+                <strong>How to use:</strong>
+              </p>
+              <ol className="text-sm text-slate-400 space-y-1 list-decimal list-inside">
+                <li>Go to your pricing page</li>
+                <li>Click the "Monthly" toggle and copy all visible pricing text</li>
+                <li>Paste it in the "Monthly View" box below</li>
+                <li>Click the "Yearly/Annual" toggle and copy all visible pricing text</li>
+                <li>Paste it in the "Yearly View" box below</li>
+                <li>Click "Extract from Pasted Text"</li>
+              </ol>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              {/* Monthly Text */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-300 mb-2 flex items-center gap-2">
+                  <span className="w-2 h-2 bg-blue-400 rounded-full"></span>
+                  Monthly View Text
+                </label>
+                <textarea
+                  value={monthlyText}
+                  onChange={(e) => setMonthlyText(e.target.value)}
+                  placeholder="Paste pricing text when Monthly is selected...
+
+Example:
+Pro Plan
+$19/mo
+Unlimited projects
+Priority support
+..."
+                  className="w-full h-48 px-4 py-3 rounded-xl bg-slate-900/50 border border-slate-700 text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all resize-none text-sm font-mono"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  {monthlyText.length > 0 ? `${monthlyText.length} characters` : 'Empty'}
+                </p>
+              </div>
+
+              {/* Yearly Text */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-300 mb-2 flex items-center gap-2">
+                  <span className="w-2 h-2 bg-emerald-400 rounded-full"></span>
+                  Yearly View Text
+                </label>
+                <textarea
+                  value={yearlyText}
+                  onChange={(e) => setYearlyText(e.target.value)}
+                  placeholder="Paste pricing text when Yearly/Annual is selected...
+
+Example:
+Pro Plan
+$15/mo (billed annually)
+Save 20%
+Unlimited projects
+Priority support
+..."
+                  className="w-full h-48 px-4 py-3 rounded-xl bg-slate-900/50 border border-slate-700 text-white placeholder-slate-500 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all resize-none text-sm font-mono"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  {yearlyText.length > 0 ? `${yearlyText.length} characters` : 'Empty'}
+                </p>
+              </div>
+            </div>
+
+            {/* Extract Button */}
+            <div className="flex items-center justify-between pt-4 border-t border-slate-700">
+              <p className="text-sm text-slate-400">
+                {!monthlyText && !yearlyText 
+                  ? 'Paste at least one pricing view to extract'
+                  : monthlyText && yearlyText 
+                    ? 'Both monthly and yearly text provided ✓'
+                    : monthlyText 
+                      ? 'Only monthly text provided (yearly will be missing)'
+                      : 'Only yearly text provided (monthly will be missing)'
+                }
+              </p>
+              <button
+                onClick={handleExtractFromText}
+                disabled={isPasteExtracting || (!monthlyText.trim() && !yearlyText.trim())}
+                className="px-6 py-3 bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-xl font-semibold hover:from-amber-600 hover:to-orange-700 hover:scale-105 transition-all shadow-lg shadow-amber-500/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+              >
+                {isPasteExtracting ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Extracting...
+                  </span>
+                ) : (
+                  'Extract from Pasted Text'
+                )}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Extraction Results */}
