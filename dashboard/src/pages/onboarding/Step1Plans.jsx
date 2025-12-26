@@ -1,63 +1,106 @@
 import { useState } from 'react';
-
-const CURRENCIES = [
-  { value: 'USD', label: 'USD ($)' },
-  { value: 'EUR', label: 'EUR (€)' },
-  { value: 'GBP', label: 'GBP (£)' },
-  { value: 'TRY', label: 'TRY (₺)' },
-];
-
-const BILLING_CYCLES = [
-  { value: 'monthly', label: 'Monthly' },
-  { value: 'yearly', label: 'Yearly' },
-  { value: 'one-time', label: 'One-time' },
-];
+import { pricingV2Api } from '../../lib/apiClient';
 
 const Step1Plans = ({ data, onChange }) => {
-  const [newPlan, setNewPlan] = useState({
-    name: '',
-    price: '',
-    currency: 'USD',
-    billingCycle: 'monthly',
-  });
+  const [websiteUrl, setWebsiteUrl] = useState('');
+  const [pricingUrl, setPricingUrl] = useState('');
+  const [manualPricingUrl, setManualPricingUrl] = useState('');
+  const [isDiscovering, setIsDiscovering] = useState(false);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [candidates, setCandidates] = useState([]);
+  const [extractedPlans, setExtractedPlans] = useState([]);
   const [error, setError] = useState('');
+  const [showManualInput, setShowManualInput] = useState(false);
 
-  const handleNewPlanChange = (e) => {
-    const { name, value } = e.target;
-    setNewPlan((prev) => ({ ...prev, [name]: value }));
+  const handleDiscover = async () => {
+    if (!websiteUrl.trim()) {
+      setError('Please enter your website URL');
+      return;
+    }
+
+    setIsDiscovering(true);
     setError('');
+    setCandidates([]);
+    setExtractedPlans([]);
+
+    try {
+      const response = await pricingV2Api.discover({ website_url: websiteUrl });
+      const result = response.data || response;
+      
+      if (result.error) {
+        setError(result.error);
+        setShowManualInput(true);
+        return;
+      }
+
+      setCandidates(result.pricing_candidates || []);
+      
+      if (result.selected_pricing_url) {
+        setPricingUrl(result.selected_pricing_url);
+        await handleExtract(result.selected_pricing_url);
+      } else {
+        setShowManualInput(true);
+        setError('Could not auto-detect pricing page. Please enter the URL manually.');
+      }
+    } catch (err) {
+      setError(err.message || 'Discovery failed');
+      setShowManualInput(true);
+    } finally {
+      setIsDiscovering(false);
+    }
   };
 
-  const handleAddPlan = () => {
-    if (!newPlan.name.trim()) {
-      setError('Plan name is required');
-      return;
-    }
-    if (!newPlan.price || parseFloat(newPlan.price) <= 0) {
-      setError('Price must be greater than 0');
+  const handleExtract = async (url) => {
+    const targetUrl = url || manualPricingUrl || pricingUrl;
+    
+    if (!targetUrl) {
+      setError('Please enter a pricing page URL');
       return;
     }
 
-    const plan = {
-      id: Date.now(),
-      name: newPlan.name.trim(),
-      price: parseFloat(newPlan.price),
-      currency: newPlan.currency,
-      billingCycle: newPlan.billingCycle,
-    };
-
-    onChange([...data, plan]);
-    setNewPlan({ name: '', price: '', currency: 'USD', billingCycle: 'monthly' });
+    setIsExtracting(true);
     setError('');
+
+    try {
+      const response = await pricingV2Api.extract({ pricing_url: targetUrl });
+      const result = response.data || response;
+      
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+
+      setPricingUrl(targetUrl);
+      setExtractedPlans(result.plans || []);
+      
+      // Auto-add all extracted plans to onboarding data
+      const plansForOnboarding = (result.plans || []).map((plan, idx) => ({
+        id: Date.now() + idx,
+        name: plan.name,
+        price: plan.price_amount || 0,
+        priceString: plan.price_string,
+        currency: plan.currency || 'USD',
+        billingCycle: plan.billing_period || 'monthly',
+        features: plan.features || [],
+        includedUnits: plan.included_units || [],
+      }));
+      
+      onChange(plansForOnboarding);
+    } catch (err) {
+      setError(err.message || 'Extraction failed');
+    } finally {
+      setIsExtracting(false);
+    }
   };
 
   const handleRemovePlan = (id) => {
     onChange(data.filter((p) => p.id !== id));
   };
 
-  const formatPrice = (price, currency) => {
+  const formatPrice = (plan) => {
+    if (plan.priceString) return plan.priceString;
     const symbols = { USD: '$', EUR: '€', GBP: '£', TRY: '₺' };
-    return `${symbols[currency] || currency}${price}`;
+    return `${symbols[plan.currency] || plan.currency}${plan.price}`;
   };
 
   return (
@@ -65,13 +108,127 @@ const Step1Plans = ({ data, onChange }) => {
       <div className="mb-8 text-center">
         <h2 className="text-3xl font-bold text-white mb-2">Your Pricing Plans</h2>
         <p className="text-slate-400">
-          Add the pricing plans you currently offer. At least one plan is required.
+          Auto-import your pricing plans from your website.
         </p>
       </div>
 
-      {/* Plan List */}
+      {/* Auto-detect Section */}
+      <div className="bg-slate-900/30 rounded-xl p-6 border border-slate-700/50 mb-6">
+        <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+          <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          Auto-detect Pricing
+        </h3>
+
+        <div className="space-y-4">
+          <div>
+            <label htmlFor="websiteUrl" className="block text-sm font-semibold text-slate-300 mb-2">
+              Your Website URL
+            </label>
+            <div className="flex gap-3">
+              <input
+                id="websiteUrl"
+                type="url"
+                value={websiteUrl}
+                onChange={(e) => setWebsiteUrl(e.target.value)}
+                className="flex-1 px-4 py-3 rounded-xl bg-slate-900/50 border border-slate-700 text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+                placeholder="https://www.yourcompany.com"
+              />
+              <button
+                onClick={handleDiscover}
+                disabled={isDiscovering || isExtracting}
+                className="px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl font-semibold hover:from-blue-600 hover:to-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+              >
+                {isDiscovering ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Detecting...
+                  </span>
+                ) : isExtracting ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Extracting...
+                  </span>
+                ) : (
+                  'Auto-detect & Import'
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Error Display */}
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4">
+              <p className="text-red-400 text-sm">{error}</p>
+            </div>
+          )}
+
+          {/* Candidates Display */}
+          {candidates.length > 0 && (
+            <div className="bg-slate-800/30 rounded-xl p-4">
+              <p className="text-sm text-slate-400 mb-2">Found pricing page candidates:</p>
+              <div className="flex flex-wrap gap-2">
+                {candidates.map((url, i) => (
+                  <button
+                    key={i}
+                    onClick={() => handleExtract(url)}
+                    className={`px-3 py-1.5 rounded-lg text-sm transition-all ${
+                      pricingUrl === url
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                    }`}
+                  >
+                    {new URL(url).pathname || '/'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Manual URL Input */}
+          {showManualInput && (
+            <div className="pt-4 border-t border-slate-700">
+              <label className="block text-sm font-semibold text-slate-300 mb-2">
+                Or enter pricing page URL manually:
+              </label>
+              <div className="flex gap-3">
+                <input
+                  type="url"
+                  value={manualPricingUrl}
+                  onChange={(e) => setManualPricingUrl(e.target.value)}
+                  placeholder="https://www.yourcompany.com/pricing"
+                  className="flex-1 px-4 py-3 rounded-xl bg-slate-900/50 border border-slate-700 text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+                />
+                <button
+                  onClick={() => handleExtract()}
+                  disabled={isExtracting || !manualPricingUrl}
+                  className="px-6 py-3 bg-slate-700 text-white rounded-xl font-semibold hover:bg-slate-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isExtracting ? 'Extracting...' : 'Extract'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Extracted/Imported Plans List */}
       {data.length > 0 && (
-        <div className="mb-6 space-y-3">
+        <div className="space-y-3">
+          <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+            <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            Imported Plans ({data.length})
+          </h3>
+          
           {data.map((plan) => (
             <div
               key={plan.id}
@@ -96,8 +253,14 @@ const Step1Plans = ({ data, onChange }) => {
                 <div>
                   <p className="text-white font-semibold">{plan.name}</p>
                   <p className="text-slate-400 text-sm">
-                    {formatPrice(plan.price, plan.currency)} / {plan.billingCycle}
+                    {formatPrice(plan)} / {plan.billingCycle}
                   </p>
+                  {plan.features?.length > 0 && (
+                    <p className="text-slate-500 text-xs mt-1">
+                      {plan.features.slice(0, 2).join(', ')}
+                      {plan.features.length > 2 && ` +${plan.features.length - 2} more`}
+                    </p>
+                  )}
                 </div>
               </div>
               <button
@@ -118,101 +281,6 @@ const Step1Plans = ({ data, onChange }) => {
         </div>
       )}
 
-      {/* Add Plan Form */}
-      <div className="bg-slate-900/30 rounded-xl p-6 border border-slate-700/50">
-        <h3 className="text-lg font-semibold text-white mb-4">Add a Plan</h3>
-
-        <div className="space-y-4">
-          {/* Plan Name */}
-          <div>
-            <label htmlFor="name" className="block text-sm font-semibold text-slate-300 mb-2">
-              Plan Name <span className="text-red-400">*</span>
-            </label>
-            <input
-              id="name"
-              name="name"
-              type="text"
-              value={newPlan.name}
-              onChange={handleNewPlanChange}
-              className="w-full px-4 py-3 rounded-xl bg-slate-900/50 border border-slate-700 text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
-              placeholder="e.g. Starter, Pro, Enterprise"
-            />
-          </div>
-
-          {/* Price and Currency */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="price" className="block text-sm font-semibold text-slate-300 mb-2">
-                Price <span className="text-red-400">*</span>
-              </label>
-              <input
-                id="price"
-                name="price"
-                type="number"
-                min="0"
-                step="0.01"
-                value={newPlan.price}
-                onChange={handleNewPlanChange}
-                className="w-full px-4 py-3 rounded-xl bg-slate-900/50 border border-slate-700 text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
-                placeholder="29"
-              />
-            </div>
-            <div>
-              <label htmlFor="currency" className="block text-sm font-semibold text-slate-300 mb-2">
-                Currency
-              </label>
-              <select
-                id="currency"
-                name="currency"
-                value={newPlan.currency}
-                onChange={handleNewPlanChange}
-                className="w-full px-4 py-3 pr-10 rounded-xl bg-slate-900/50 border border-slate-700 text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27rgb(148 163 184)%27 stroke-width=%272%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27%3e%3cpolyline points=%276 9 12 15 18 9%27%3e%3c/polyline%3e%3c/svg%3e')] bg-[length:1.25rem_1.25rem] bg-[position:right_0.75rem_center] bg-no-repeat"
-              >
-                {CURRENCIES.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Billing Cycle */}
-          <div>
-            <label htmlFor="billingCycle" className="block text-sm font-semibold text-slate-300 mb-2">
-              Billing Cycle
-            </label>
-            <select
-              id="billingCycle"
-              name="billingCycle"
-              value={newPlan.billingCycle}
-              onChange={handleNewPlanChange}
-              className="w-full px-4 py-3 pr-10 rounded-xl bg-slate-900/50 border border-slate-700 text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27rgb(148 163 184)%27 stroke-width=%272%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27%3e%3cpolyline points=%276 9 12 15 18 9%27%3e%3c/polyline%3e%3c/svg%3e')] bg-[length:1.25rem_1.25rem] bg-[position:right_0.75rem_center] bg-no-repeat"
-            >
-              {BILLING_CYCLES.map((b) => (
-                <option key={b.value} value={b.value}>
-                  {b.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Error */}
-          {error && <p className="text-red-400 text-sm">{error}</p>}
-
-          {/* Add Button */}
-          <button
-            onClick={handleAddPlan}
-            className="w-full px-4 py-3 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-xl font-semibold hover:bg-blue-500/30 hover:border-blue-500/50 transition-all flex items-center justify-center gap-2"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Add Plan
-          </button>
-        </div>
-      </div>
-
       {/* Requirement Info */}
       {data.length === 0 && (
         <div className="mt-4 bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
@@ -229,7 +297,7 @@ const Step1Plans = ({ data, onChange }) => {
               />
             </svg>
             <p className="text-sm text-amber-300">
-              At least one pricing plan is required to continue.
+              Enter your website URL above to auto-import your pricing plans, or at least one plan is required to continue.
             </p>
           </div>
         </div>
@@ -239,9 +307,3 @@ const Step1Plans = ({ data, onChange }) => {
 };
 
 export default Step1Plans;
-
-
-
-
-
-

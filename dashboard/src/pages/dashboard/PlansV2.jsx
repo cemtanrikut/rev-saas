@@ -260,7 +260,7 @@ const PlansV2 = () => {
       {/* Page Header */}
       <div>
         <h1 className="text-3xl font-bold text-white mb-2">
-          My Pricing V2
+          My Pricing
         </h1>
         <p className="text-slate-400">
           Auto-import your pricing plans from your website. This experimental feature extracts pricing data using AI.
@@ -712,7 +712,7 @@ Priority support
               {/* Save Button */}
               <div className="mt-6 flex items-center justify-between pt-6 border-t border-slate-700">
                 <p className="text-sm text-slate-400">
-                  Selected plans will be saved to your My Pricing V2
+                  Selected plans will be saved to your My Pricing
                 </p>
                 <button
                   onClick={handleSave}
@@ -728,7 +728,7 @@ Priority support
                       Saving...
                     </span>
                   ) : (
-                    `Save ${selectedPlans.size} Plan${selectedPlans.size !== 1 ? 's' : ''} to My Pricing V2`
+                    `Save ${selectedPlans.size} Plan${selectedPlans.size !== 1 ? 's' : ''} to My Pricing`
                   )}
                 </button>
               </div>
