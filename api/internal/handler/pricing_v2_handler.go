@@ -161,7 +161,13 @@ func (h *PricingV2Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// For now, just return success - individual delete can be added later
+	err := h.service.DeletePlan(r.Context(), user.ID.Hex(), planID)
+	if err != nil {
+		log.Printf("[pricing-v2-handler] delete error: %v", err)
+		writeJSONPV2(w, map[string]string{"error": err.Error()}, http.StatusInternalServerError)
+		return
+	}
+
 	writeJSONPV2(w, map[string]string{"status": "deleted"}, http.StatusOK)
 }
 

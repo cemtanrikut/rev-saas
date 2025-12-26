@@ -207,6 +207,25 @@ const PlansV2 = () => {
     }
   };
 
+  const handleDeletePlan = async (planId) => {
+    if (!window.confirm('Are you sure you want to delete this plan?')) return;
+    
+    try {
+      const response = await pricingV2Api.delete(planId);
+      const data = response.data || response;
+      
+      if (data.error) {
+        console.error('Delete failed:', data.error);
+        return;
+      }
+      
+      // Remove from local state
+      setSavedPlans(prev => prev.filter(p => p.id !== planId));
+    } catch (err) {
+      console.error('Delete failed:', err);
+    }
+  };
+
   const togglePlanSelection = (index) => {
     const newSelected = new Set(selectedPlans);
     if (newSelected.has(index)) {
@@ -743,6 +762,20 @@ const PlansV2 = () => {
                   <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 to-fuchsia-500/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity" />
                   
                   <div className="relative">
+                    {/* Delete Button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeletePlan(plan.id);
+                      }}
+                      className="absolute top-0 right-0 p-2 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all z-10"
+                      title="Delete plan"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+
                     <div className="flex items-start justify-between mb-4">
                       <div>
                         <span className={`inline-block px-2 py-1 rounded-lg text-xs font-medium mb-2 ${

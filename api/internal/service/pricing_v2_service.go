@@ -1112,6 +1112,21 @@ func (s *PricingV2Service) GetSavedPlans(ctx context.Context, userID string) (*m
 	return &model.SavedPricingV2Response{Plans: plans, Count: len(plans)}, nil
 }
 
+// DeletePlan deletes a specific pricing plan
+func (s *PricingV2Service) DeletePlan(ctx context.Context, userID, planID string) error {
+	uid, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return fmt.Errorf("invalid user ID")
+	}
+
+	pid, err := primitive.ObjectIDFromHex(planID)
+	if err != nil {
+		return fmt.Errorf("invalid plan ID")
+	}
+
+	return s.repo.Delete(ctx, pid, uid)
+}
+
 // ExtractFromText extracts pricing from pasted text (paste mode fallback)
 func (s *PricingV2Service) ExtractFromText(ctx context.Context, req model.PricingExtractFromTextRequest) (*model.PricingExtractFromTextResponse, error) {
 	var warnings []string
