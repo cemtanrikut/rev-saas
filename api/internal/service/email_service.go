@@ -23,6 +23,7 @@ type SMTPConfig struct {
 type EmailService struct {
 	config       SMTPConfig
 	appPublicURL string
+	logoURL      string // Public URL for logo image
 }
 
 // NewEmailService creates a new EmailService
@@ -36,7 +37,13 @@ func NewEmailService(host, port, user, password, from, appPublicURL string) *Ema
 			From:     from,
 		},
 		appPublicURL: appPublicURL,
+		logoURL:      "", // Set via SetLogoURL or environment variable
 	}
+}
+
+// SetLogoURL sets the public URL for the logo image
+func (s *EmailService) SetLogoURL(url string) {
+	s.logoURL = url
 }
 
 // sendEmail sends an email using the configured SMTP server.
@@ -78,7 +85,6 @@ func (s *EmailService) sendEmail(ctx context.Context, to, subject, htmlBody stri
 
 // sendWithSTARTTLS connects using STARTTLS (for port 587)
 func (s *EmailService) sendWithSTARTTLS(addr string, auth smtp.Auth, from, to string, msg []byte) error {
-	// Connect to the server
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("failed to connect to SMTP server: %w", err)
@@ -91,12 +97,10 @@ func (s *EmailService) sendWithSTARTTLS(addr string, auth smtp.Auth, from, to st
 	}
 	defer c.Close()
 
-	// Say EHLO
 	if err = c.Hello("localhost"); err != nil {
 		return fmt.Errorf("EHLO failed: %w", err)
 	}
 
-	// Start TLS
 	tlsconfig := &tls.Config{
 		ServerName: s.config.Host,
 	}
@@ -104,12 +108,10 @@ func (s *EmailService) sendWithSTARTTLS(addr string, auth smtp.Auth, from, to st
 		return fmt.Errorf("STARTTLS failed: %w", err)
 	}
 
-	// Authenticate
 	if err = c.Auth(auth); err != nil {
 		return fmt.Errorf("SMTP auth failed: %w", err)
 	}
 
-	// Set sender and recipient
 	if err = c.Mail(from); err != nil {
 		return fmt.Errorf("MAIL FROM failed: %w", err)
 	}
@@ -118,7 +120,6 @@ func (s *EmailService) sendWithSTARTTLS(addr string, auth smtp.Auth, from, to st
 		return fmt.Errorf("RCPT TO failed: %w", err)
 	}
 
-	// Send the message body
 	w, err := c.Data()
 	if err != nil {
 		return fmt.Errorf("DATA failed: %w", err)
@@ -185,9 +186,25 @@ func (s *EmailService) sendWithDirectTLS(addr string, auth smtp.Auth, from, to s
 	return c.Quit()
 }
 
+// getLogoHTML returns the logo HTML - either image or text fallback
+func (s *EmailService) getLogoHTML() string {
+	if s.logoURL != "" {
+		return fmt.Sprintf(`<img src="%s" alt="Revalyze" width="140" height="auto" style="display: block; margin: 0 auto;" />`, s.logoURL)
+	}
+	// Text-based logo fallback with gradient background
+	return `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 0 auto;">
+              <tr>
+                <td style="background: linear-gradient(135deg, #8b5cf6 0%, #d946ef 100%); padding: 12px 28px; border-radius: 12px;">
+                  <span style="font-size: 26px; font-weight: 700; color: #ffffff; letter-spacing: -0.5px;">Revalyze</span>
+                </td>
+              </tr>
+            </table>`
+}
+
 // SendVerificationEmail sends a verification email with a magic link
 func (s *EmailService) SendVerificationEmail(ctx context.Context, toEmail, token string) error {
 	verifyURL := fmt.Sprintf("%s/auth/verify-email?token=%s", s.appPublicURL, token)
+	logoHTML := s.getLogoHTML()
 
 	subject := "Verify your email - Revalyze"
 
@@ -207,13 +224,7 @@ func (s *EmailService) SendVerificationEmail(ctx context.Context, toEmail, token
           <!-- Logo -->
           <tr>
             <td style="text-align: center; padding-bottom: 32px;">
-              <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 0 auto;">
-                <tr>
-                  <td style="background: linear-gradient(135deg, #8b5cf6 0%%, #d946ef 100%%); padding: 12px 24px; border-radius: 12px;">
-                    <span style="font-size: 24px; font-weight: 700; color: #ffffff; letter-spacing: -0.5px;">Revalyze</span>
-                  </td>
-                </tr>
-              </table>
+              %s
             </td>
           </tr>
           
@@ -228,13 +239,7 @@ func (s *EmailService) SendVerificationEmail(ctx context.Context, toEmail, token
                     <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%">
                       <tr>
                         <td style="text-align: center; padding-bottom: 24px;">
-                          <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 0 auto;">
-                            <tr>
-                              <td style="width: 64px; height: 64px; background: linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%%, rgba(217, 70, 239, 0.2) 100%%); border-radius: 16px; text-align: center; vertical-align: middle; border: 1px solid rgba(139, 92, 246, 0.3);">
-                                <span style="font-size: 28px; line-height: 64px;">&#9993;</span>
-                              </td>
-                            </tr>
-                          </table>
+                          <span style="font-size: 48px;">&#9993;&#65039;</span>
                         </td>
                       </tr>
                     </table>
@@ -265,7 +270,7 @@ func (s *EmailService) SendVerificationEmail(ctx context.Context, toEmail, token
                       <tr>
                         <td style="background-color: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.2); border-radius: 12px; padding: 16px 20px; text-align: center;">
                           <p style="margin: 0; font-size: 14px; color: #fbbf24;">
-                            This link expires in <strong>30 minutes</strong>
+                            &#9200; This link expires in <strong>30 minutes</strong>
                           </p>
                         </td>
                       </tr>
@@ -311,7 +316,7 @@ func (s *EmailService) SendVerificationEmail(ctx context.Context, toEmail, token
     </tr>
   </table>
 </body>
-</html>`, verifyURL, verifyURL)
+</html>`, logoHTML, verifyURL, verifyURL)
 
 	log.Printf("[email] Sending verification email to %s", toEmail)
 	return s.sendEmail(ctx, toEmail, subject, htmlBody)
@@ -320,8 +325,9 @@ func (s *EmailService) SendVerificationEmail(ctx context.Context, toEmail, token
 // SendWelcomeEmail sends a welcome email after verification
 func (s *EmailService) SendWelcomeEmail(ctx context.Context, toEmail string) error {
 	dashboardURL := fmt.Sprintf("%s/app/overview", s.appPublicURL)
+	logoHTML := s.getLogoHTML()
 
-	subject := "Welcome to Revalyze"
+	subject := "Welcome to Revalyze! 🎉"
 
 	htmlBody := fmt.Sprintf(`<!DOCTYPE html>
 <html lang="en">
@@ -334,119 +340,141 @@ func (s *EmailService) SendWelcomeEmail(ctx context.Context, toEmail string) err
   <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%" style="background-color: #0f172a;">
     <tr>
       <td style="padding: 48px 24px;">
-        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%" style="max-width: 520px; margin: 0 auto;">
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%" style="max-width: 560px; margin: 0 auto;">
+          
+          <!-- Celebration Header -->
+          <tr>
+            <td style="text-align: center; padding-bottom: 16px;">
+              <span style="font-size: 40px;">&#127881; &#127882; &#127881;</span>
+            </td>
+          </tr>
           
           <!-- Logo -->
           <tr>
             <td style="text-align: center; padding-bottom: 32px;">
-              <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 0 auto;">
-                <tr>
-                  <td style="background: linear-gradient(135deg, #8b5cf6 0%%, #d946ef 100%%); padding: 12px 24px; border-radius: 12px;">
-                    <span style="font-size: 24px; font-weight: 700; color: #ffffff; letter-spacing: -0.5px;">Revalyze</span>
-                  </td>
-                </tr>
-              </table>
+              %s
             </td>
           </tr>
           
           <!-- Main Card -->
           <tr>
             <td>
-              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%" style="background-color: #1e293b; border-radius: 16px; border: 1px solid #334155;">
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%" style="background-color: #1e293b; border-radius: 16px; border: 1px solid #334155; position: relative;">
+                
+                <!-- Decorative side characters -->
                 <tr>
-                  <td style="padding: 40px 32px;">
-                    
-                    <!-- Success Icon -->
+                  <td style="padding: 0;">
                     <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%">
                       <tr>
-                        <td style="text-align: center; padding-bottom: 24px;">
-                          <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 0 auto;">
-                            <tr>
-                              <td style="width: 64px; height: 64px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%%, rgba(6, 182, 212, 0.2) 100%%); border-radius: 16px; text-align: center; vertical-align: middle; border: 1px solid rgba(16, 185, 129, 0.3);">
-                                <span style="font-size: 28px; line-height: 64px; color: #10b981;">&#10003;</span>
-                              </td>
-                            </tr>
-                          </table>
+                        <td style="width: 50px; vertical-align: top; padding-top: 40px; text-align: center;">
+                          <span style="font-size: 32px;">&#129395;</span>
                         </td>
-                      </tr>
-                    </table>
-                    
-                    <!-- Title -->
-                    <h1 style="margin: 0 0 12px 0; font-size: 28px; font-weight: 700; color: #f8fafc; text-align: center; letter-spacing: -0.5px;">
-                      Welcome to Revalyze!
-                    </h1>
-                    
-                    <!-- Description -->
-                    <p style="margin: 0 0 32px 0; font-size: 16px; line-height: 1.7; color: #94a3b8; text-align: center;">
-                      Your email is verified and your account is ready. Start optimizing your SaaS pricing strategy with AI-powered insights.
-                    </p>
-                    
-                    <!-- Features -->
-                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%" style="margin-bottom: 32px;">
-                      <tr>
-                        <td style="padding: 16px; background-color: #0f172a; border-radius: 12px; border: 1px solid #334155;">
+                        <td style="padding: 40px 20px;">
+                          
+                          <!-- Success Badge -->
                           <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%">
                             <tr>
-                              <td style="padding-bottom: 12px;">
-                                <table role="presentation" cellspacing="0" cellpadding="0" border="0">
-                                  <tr>
-                                    <td style="width: 24px; vertical-align: top; padding-right: 12px;">
-                                      <span style="color: #10b981; font-size: 14px;">&#10003;</span>
-                                    </td>
-                                    <td style="font-size: 14px; color: #cbd5e1; line-height: 1.5;">
-                                      <strong style="color: #f8fafc;">Competitive Analysis</strong> - Track competitor pricing
-                                    </td>
-                                  </tr>
-                                </table>
+                              <td style="text-align: center; padding-bottom: 20px;">
+                                <span style="display: inline-block; background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%%, rgba(6, 182, 212, 0.2) 100%%); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 50px; padding: 8px 20px; font-size: 14px; color: #10b981; font-weight: 600;">
+                                  &#10003; Email Verified
+                                </span>
                               </td>
                             </tr>
+                          </table>
+                          
+                          <!-- Title -->
+                          <h1 style="margin: 0 0 8px 0; font-size: 32px; font-weight: 700; color: #f8fafc; text-align: center; letter-spacing: -0.5px;">
+                            Welcome aboard!
+                          </h1>
+                          
+                          <!-- Subtitle -->
+                          <p style="margin: 0 0 28px 0; font-size: 18px; line-height: 1.6; color: #94a3b8; text-align: center;">
+                            You're all set to optimize your SaaS pricing
+                          </p>
+                          
+                          <!-- Features Grid -->
+                          <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%" style="margin-bottom: 28px;">
                             <tr>
-                              <td style="padding-bottom: 12px;">
-                                <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                              <td style="padding: 16px; background-color: #0f172a; border-radius: 12px; border: 1px solid #334155;">
+                                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%">
                                   <tr>
-                                    <td style="width: 24px; vertical-align: top; padding-right: 12px;">
-                                      <span style="color: #10b981; font-size: 14px;">&#10003;</span>
-                                    </td>
-                                    <td style="font-size: 14px; color: #cbd5e1; line-height: 1.5;">
-                                      <strong style="color: #f8fafc;">AI Insights</strong> - Smart pricing recommendations
+                                    <td style="padding-bottom: 14px;">
+                                      <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                                        <tr>
+                                          <td style="width: 36px; vertical-align: top; padding-right: 12px;">
+                                            <span style="font-size: 20px;">&#128269;</span>
+                                          </td>
+                                          <td style="font-size: 14px; color: #cbd5e1; line-height: 1.5;">
+                                            <strong style="color: #f8fafc;">Discover Competitors</strong><br/>
+                                            <span style="color: #94a3b8;">AI-powered competitor detection</span>
+                                          </td>
+                                        </tr>
+                                      </table>
                                     </td>
                                   </tr>
-                                </table>
-                              </td>
-                            </tr>
-                            <tr>
-                              <td>
-                                <table role="presentation" cellspacing="0" cellpadding="0" border="0">
                                   <tr>
-                                    <td style="width: 24px; vertical-align: top; padding-right: 12px;">
-                                      <span style="color: #10b981; font-size: 14px;">&#10003;</span>
+                                    <td style="padding-bottom: 14px;">
+                                      <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                                        <tr>
+                                          <td style="width: 36px; vertical-align: top; padding-right: 12px;">
+                                            <span style="font-size: 20px;">&#128161;</span>
+                                          </td>
+                                          <td style="font-size: 14px; color: #cbd5e1; line-height: 1.5;">
+                                            <strong style="color: #f8fafc;">Smart Insights</strong><br/>
+                                            <span style="color: #94a3b8;">Data-driven pricing recommendations</span>
+                                          </td>
+                                        </tr>
+                                      </table>
                                     </td>
-                                    <td style="font-size: 14px; color: #cbd5e1; line-height: 1.5;">
-                                      <strong style="color: #f8fafc;">Simulations</strong> - Test scenarios before changes
+                                  </tr>
+                                  <tr>
+                                    <td>
+                                      <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                                        <tr>
+                                          <td style="width: 36px; vertical-align: top; padding-right: 12px;">
+                                            <span style="font-size: 20px;">&#128200;</span>
+                                          </td>
+                                          <td style="font-size: 14px; color: #cbd5e1; line-height: 1.5;">
+                                            <strong style="color: #f8fafc;">Simulations</strong><br/>
+                                            <span style="color: #94a3b8;">Test pricing changes risk-free</span>
+                                          </td>
+                                        </tr>
+                                      </table>
                                     </td>
                                   </tr>
                                 </table>
                               </td>
                             </tr>
                           </table>
+                          
+                          <!-- CTA Button -->
+                          <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%">
+                            <tr>
+                              <td style="text-align: center;">
+                                <a href="%s" style="display: inline-block; padding: 16px 48px; background: linear-gradient(135deg, #8b5cf6 0%%, #d946ef 100%%); color: #ffffff; text-decoration: none; font-weight: 600; font-size: 16px; border-radius: 12px;">
+                                  Start Exploring &#8594;
+                                </a>
+                              </td>
+                            </tr>
+                          </table>
+                          
+                        </td>
+                        <td style="width: 50px; vertical-align: top; padding-top: 40px; text-align: center;">
+                          <span style="font-size: 32px;">&#129321;</span>
                         </td>
                       </tr>
                     </table>
-                    
-                    <!-- CTA Button -->
-                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%">
-                      <tr>
-                        <td style="text-align: center;">
-                          <a href="%s" style="display: inline-block; padding: 16px 40px; background: linear-gradient(135deg, #8b5cf6 0%%, #d946ef 100%%); color: #ffffff; text-decoration: none; font-weight: 600; font-size: 16px; border-radius: 12px;">
-                            Go to Dashboard
-                          </a>
-                        </td>
-                      </tr>
-                    </table>
-                    
                   </td>
                 </tr>
+                
               </table>
+            </td>
+          </tr>
+          
+          <!-- Bottom Celebration -->
+          <tr>
+            <td style="text-align: center; padding-top: 24px;">
+              <span style="font-size: 28px;">&#127878; &#127880; &#127873; &#127880; &#127878;</span>
             </td>
           </tr>
           
@@ -454,7 +482,7 @@ func (s *EmailService) SendWelcomeEmail(ctx context.Context, toEmail string) err
           <tr>
             <td style="padding-top: 32px; text-align: center;">
               <p style="margin: 0 0 8px 0; font-size: 13px; color: #64748b; line-height: 1.5;">
-                Need help? Reply to this email and we'll assist you.
+                Questions? Just reply to this email — we're here to help!
               </p>
               <p style="margin: 16px 0 0 0; font-size: 12px; color: #475569;">
                 &copy; 2025 Revalyze B.V. &bull; Amsterdam, Netherlands
@@ -467,7 +495,7 @@ func (s *EmailService) SendWelcomeEmail(ctx context.Context, toEmail string) err
     </tr>
   </table>
 </body>
-</html>`, dashboardURL)
+</html>`, logoHTML, dashboardURL)
 
 	log.Printf("[email] Sending welcome email to %s", toEmail)
 	return s.sendEmail(ctx, toEmail, subject, htmlBody)
