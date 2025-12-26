@@ -320,8 +320,10 @@ func (s *PricingV2Service) ExtractPricing(ctx context.Context, pricingURL string
 }
 
 // shouldUseBrowserRender checks if browser rendering is available
+// NOTE: Temporarily disabled due to timeout issues with toggle clicking
+// Users can use "Paste mode" for sites with dynamic monthly/yearly toggles
 func (s *PricingV2Service) shouldUseBrowserRender() bool {
-	return true
+	return false // Disabled - use paste mode for toggle sites
 }
 
 // extractWithBrowserRender uses chromedp to render page and capture toggle states
