@@ -10,6 +10,8 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -55,29 +57,65 @@ var toggleIndicators = []string{
 	"switch to annual", "switch to monthly",
 }
 
-// Monthly keyword synonyms for tab detection
-var monthlyKeywords = []string{
-	"monthly", "month", "/mo", "per month", "mo", "pay monthly", "billed monthly",
+// Monthly signals for price/mode detection
+var monthlySignals = []string{
+	"/mo", "per month", "monthly", "billed monthly", "/month",
 }
 
-// Yearly keyword synonyms for tab detection  
-var yearlyKeywords = []string{
-	"yearly", "annual", "annually", "year", "/yr", "per year", 
-	"pay annually", "billed annually", "save", "pay yearly",
+// Yearly signals for price/mode detection
+var yearlySignals = []string{
+	"/yr", "per year", "annually", "billed annually", "yearly", 
+	"billed yearly", "/year", "save",
+}
+
+// Expand button keywords
+var expandKeywords = []string{
+	"see all", "show more", "compare", "all features", 
+	"view features", "expand", "show all", "more features",
 }
 
 // PricingV2Service handles pricing v2 operations
 type PricingV2Service struct {
-	repo       *mongorepo.PricingV2Repository
-	openAIKey  string
-	httpClient *http.Client
+	repo         *mongorepo.PricingV2Repository
+	openAIKey    string
+	httpClient   *http.Client
+	isStaging    bool
+	debugDir     string
+}
+
+// DebugArtifacts stores debug information for extraction runs
+type DebugArtifacts struct {
+	RunID              string    `json:"run_id"`
+	Timestamp          time.Time `json:"timestamp"`
+	URL                string    `json:"url"`
+	MonthlyTabLabel    string    `json:"monthly_tab_label"`
+	YearlyTabLabel     string    `json:"yearly_tab_label"`
+	MonthlyClickAttempted bool   `json:"monthly_click_attempted"`
+	YearlyClickAttempted  bool   `json:"yearly_click_attempted"`
+	MonthlyStateChanged   bool   `json:"monthly_state_changed"`
+	YearlyStateChanged    bool   `json:"yearly_state_changed"`
+	FoundMonthlyPrices    bool   `json:"found_monthly_prices"`
+	FoundYearlyPrices     bool   `json:"found_yearly_prices"`
+	SelectedStateBefore   string `json:"selected_state_before"`
+	SelectedStateAfter    string `json:"selected_state_after"`
+	ArtifactsPath         string `json:"artifacts_path"`
 }
 
 // NewPricingV2Service creates a new PricingV2Service
 func NewPricingV2Service(repo *mongorepo.PricingV2Repository, openAIKey string) *PricingV2Service {
+	isStaging := os.Getenv("APP_ENV") == "staging" || os.Getenv("APP_ENV") == "local"
+	debugDir := "/tmp/pricing-v2-debug"
+	
+	if isStaging {
+		os.MkdirAll(debugDir, 0755)
+		log.Printf("[pricing-v2] Debug artifacts enabled, saving to: %s", debugDir)
+	}
+	
 	return &PricingV2Service{
 		repo:      repo,
 		openAIKey: openAIKey,
+		isStaging: isStaging,
+		debugDir:  debugDir,
 		httpClient: &http.Client{
 			Timeout: httpTimeout,
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -270,39 +308,24 @@ func (s *PricingV2Service) ExtractPricing(ctx context.Context, pricingURL string
 
 // shouldUseBrowserRender checks if browser rendering is available
 func (s *PricingV2Service) shouldUseBrowserRender() bool {
-	// Always try browser render when needed
 	return true
-}
-
-// tabCandidate represents a potential billing toggle tab element
-type tabCandidate struct {
-	selector string
-	text     string
-	score    int
-	isMonthly bool
-	isYearly  bool
-}
-
-// scoreTabText scores text against monthly/yearly keywords
-func (s *PricingV2Service) scoreTabText(text string, keywords []string) int {
-	normalized := strings.ToLower(strings.TrimSpace(text))
-	normalized = regexp.MustCompile(`\s+`).ReplaceAllString(normalized, " ")
-	
-	score := 0
-	for _, kw := range keywords {
-		if strings.Contains(normalized, kw) {
-			score += 10
-			// Bonus for exact match
-			if normalized == kw {
-				score += 20
-			}
-		}
-	}
-	return score
 }
 
 // extractWithBrowserRender uses chromedp to render page and capture toggle states
 func (s *PricingV2Service) extractWithBrowserRender(ctx context.Context, pricingURL string) ([]model.ExtractedPlan, []string, []string, error) {
+	// Create debug artifacts for this run
+	runID := fmt.Sprintf("%d", time.Now().UnixNano())
+	artifacts := &DebugArtifacts{
+		RunID:     runID,
+		Timestamp: time.Now(),
+		URL:       pricingURL,
+	}
+	artifactsDir := filepath.Join(s.debugDir, runID)
+	if s.isStaging {
+		os.MkdirAll(artifactsDir, 0755)
+		artifacts.ArtifactsPath = artifactsDir
+	}
+
 	// Create browser context with timeout
 	allocCtx, cancel := chromedp.NewExecAllocator(ctx,
 		append(chromedp.DefaultExecAllocatorOptions[:],
@@ -327,84 +350,141 @@ func (s *PricingV2Service) extractWithBrowserRender(ctx context.Context, pricing
 	defer cancelBrowser()
 
 	// Set timeout for browser operations
-	browserCtx, cancelTimeout := context.WithTimeout(browserCtx, 60*time.Second)
+	browserCtx, cancelTimeout := context.WithTimeout(browserCtx, 90*time.Second)
 	defer cancelTimeout()
 
 	var warnings []string
 
 	// Load the page
-	var defaultHTML string
-	var defaultText string
-	
 	log.Printf("[pricing-v2] loading page in browser: %s", pricingURL)
 	
 	err := chromedp.Run(browserCtx,
 		chromedp.Navigate(pricingURL),
 		chromedp.WaitVisible("body", chromedp.ByQuery),
-		chromedp.Sleep(3*time.Second), // Wait for JS to load
-		chromedp.InnerHTML("html", &defaultHTML, chromedp.ByQuery),
-		chromedp.Text("body", &defaultText, chromedp.ByQuery),
+		chromedp.Sleep(3*time.Second),
 	)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to load page: %w", err)
 	}
 
-	log.Printf("[pricing-v2] captured default state, text length: %d", len(defaultText))
+	// C) Expand features before snapshot
+	s.expandFeatureSections(browserCtx)
 
-	// Find tab candidates using improved heuristics
-	monthlyTab, yearlyTab := s.findBillingTabs(browserCtx, defaultHTML)
-	
+	// Get initial state
+	var initialHTML, initialText string
+	chromedp.Run(browserCtx,
+		chromedp.InnerHTML("html", &initialHTML, chromedp.ByQuery),
+		chromedp.Text("body", &initialText, chromedp.ByQuery),
+	)
+
+	// Detect current billing mode
+	currentMode := s.detectCurrentBillingMode(initialText)
+	artifacts.SelectedStateBefore = currentMode
+	log.Printf("[pricing-v2] detected initial billing mode: %s", currentMode)
+
+	// Find toggle controls
+	monthlyTab, yearlyTab := s.findToggleControls(browserCtx)
+	artifacts.MonthlyTabLabel = monthlyTab.label
+	artifacts.YearlyTabLabel = yearlyTab.label
+
+	// Capture snapshots for both billing modes
 	var monthlyHTML, monthlyText string
 	var yearlyHTML, yearlyText string
-	monthlyClicked := false
-	yearlyClicked := false
+	var monthlySuccess, yearlySuccess bool
 
-	// Click monthly tab with state verification
-	if monthlyTab != "" {
-		log.Printf("[pricing-v2] attempting to click monthly tab: %s", monthlyTab)
-		monthlyClicked, monthlyHTML, monthlyText = s.clickTabWithVerification(browserCtx, monthlyTab, "monthly", defaultText)
-		if !monthlyClicked {
+	// B) Switch to monthly mode
+	if monthlyTab.selector != "" {
+		artifacts.MonthlyClickAttempted = true
+		result := s.switchBillingMode(browserCtx, "monthly", monthlyTab, currentMode)
+		monthlySuccess = result.success
+		artifacts.MonthlyStateChanged = result.stateChanged
+		
+		if monthlySuccess {
+			chromedp.Run(browserCtx,
+				chromedp.InnerHTML("html", &monthlyHTML, chromedp.ByQuery),
+				chromedp.Text("body", &monthlyText, chromedp.ByQuery),
+			)
+			artifacts.FoundMonthlyPrices = s.hasMonthlyPrices(monthlyText)
+			
+			// Save debug artifacts
+			if s.isStaging {
+				s.saveDebugArtifact(artifactsDir, "visible_text_monthly.txt", monthlyText)
+				s.saveDebugArtifact(artifactsDir, "html_monthly.html", monthlyHTML)
+				s.takeScreenshot(browserCtx, filepath.Join(artifactsDir, "screenshot_monthly.png"))
+			}
+		} else {
 			warnings = append(warnings, "monthly_toggle_failed")
+			log.Printf("[pricing-v2] monthly toggle failed: %s", result.reason)
 		}
 	} else {
 		warnings = append(warnings, "monthly_toggle_not_found")
 	}
 
-	// Click yearly tab with state verification
-	if yearlyTab != "" {
-		log.Printf("[pricing-v2] attempting to click yearly tab: %s", yearlyTab)
-		yearlyClicked, yearlyHTML, yearlyText = s.clickTabWithVerification(browserCtx, yearlyTab, "yearly", defaultText)
-		if !yearlyClicked {
+	// B) Switch to yearly mode
+	if yearlyTab.selector != "" {
+		artifacts.YearlyClickAttempted = true
+		result := s.switchBillingMode(browserCtx, "yearly", yearlyTab, currentMode)
+		yearlySuccess = result.success
+		artifacts.YearlyStateChanged = result.stateChanged
+		
+		if yearlySuccess {
+			chromedp.Run(browserCtx,
+				chromedp.InnerHTML("html", &yearlyHTML, chromedp.ByQuery),
+				chromedp.Text("body", &yearlyText, chromedp.ByQuery),
+			)
+			artifacts.FoundYearlyPrices = s.hasYearlyPrices(yearlyText)
+			
+			// Save debug artifacts
+			if s.isStaging {
+				s.saveDebugArtifact(artifactsDir, "visible_text_yearly.txt", yearlyText)
+				s.saveDebugArtifact(artifactsDir, "html_yearly.html", yearlyHTML)
+				s.takeScreenshot(browserCtx, filepath.Join(artifactsDir, "screenshot_yearly.png"))
+			}
+		} else {
 			warnings = append(warnings, "yearly_toggle_failed")
+			log.Printf("[pricing-v2] yearly toggle failed: %s", result.reason)
 		}
 	} else {
 		warnings = append(warnings, "yearly_toggle_not_found")
 	}
 
-	// Build combined content for LLM with clear section markers
+	// Get final state
+	var finalText string
+	chromedp.Run(browserCtx, chromedp.Text("body", &finalText, chromedp.ByQuery))
+	artifacts.SelectedStateAfter = s.detectCurrentBillingMode(finalText)
+
+	// Save debug artifacts summary
+	if s.isStaging {
+		s.saveDebugArtifacts(artifactsDir, artifacts)
+		log.Printf("[pricing-v2] Debug artifacts saved to: %s", artifactsDir)
+	}
+
+	// D) Build combined content with explicit snapshot markers
 	var combinedContent strings.Builder
 	
-	if monthlyClicked && monthlyText != "" {
-		combinedContent.WriteString("=== MONTHLY BILLING STATE (after clicking monthly tab) ===\n")
+	if monthlySuccess && monthlyText != "" {
+		combinedContent.WriteString("=== SNAPSHOT: MONTHLY BILLING MODE ===\n")
+		combinedContent.WriteString("(This snapshot was captured after clicking the monthly billing toggle)\n\n")
 		combinedContent.WriteString(monthlyText)
 		combinedContent.WriteString("\n\n")
 	}
 	
-	if yearlyClicked && yearlyText != "" {
-		combinedContent.WriteString("=== YEARLY/ANNUAL BILLING STATE (after clicking yearly tab) ===\n")
+	if yearlySuccess && yearlyText != "" {
+		combinedContent.WriteString("=== SNAPSHOT: YEARLY/ANNUAL BILLING MODE ===\n")
+		combinedContent.WriteString("(This snapshot was captured after clicking the yearly/annual billing toggle)\n\n")
 		combinedContent.WriteString(yearlyText)
 		combinedContent.WriteString("\n\n")
 	}
 	
-	// Use default state if nothing was clicked
-	if !monthlyClicked && !yearlyClicked {
-		combinedContent.WriteString("=== DEFAULT STATE (no tabs clicked) ===\n")
-		combinedContent.WriteString(defaultText)
+	// Fallback to initial state if no toggle clicked
+	if !monthlySuccess && !yearlySuccess {
+		combinedContent.WriteString("=== SNAPSHOT: DEFAULT STATE (no toggle clicked) ===\n")
+		combinedContent.WriteString(initialText)
 		warnings = append(warnings, "no_toggle_clicked")
 	}
 
-	// Add script JSON from rendered HTML
-	combinedHTML := defaultHTML
+	// Add script JSON
+	combinedHTML := initialHTML
 	if yearlyHTML != "" {
 		combinedHTML += yearlyHTML
 	}
@@ -423,6 +503,18 @@ func (s *PricingV2Service) extractWithBrowserRender(ctx context.Context, pricing
 		return nil, nil, nil, fmt.Errorf("LLM extraction failed: %w", err)
 	}
 
+	// Check for missing features
+	hasFeatures := false
+	for _, p := range plans {
+		if len(p.Features) > 0 {
+			hasFeatures = true
+			break
+		}
+	}
+	if !hasFeatures && len(plans) > 0 {
+		warnings = append(warnings, "features_not_visible")
+	}
+
 	// Deduplicate plans
 	plans = s.deduplicatePlans(plans)
 
@@ -432,213 +524,246 @@ func (s *PricingV2Service) extractWithBrowserRender(ctx context.Context, pricing
 	return plans, periods, warnings, nil
 }
 
-// findBillingTabs finds the best monthly and yearly tab selectors using scoring
-func (s *PricingV2Service) findBillingTabs(ctx context.Context, pageHTML string) (monthlySelector, yearlySelector string) {
-	// JavaScript to find all potential tab elements with their text and attributes
-	var tabsJSON string
+// ToggleControl represents a billing toggle control
+type ToggleControl struct {
+	selector string
+	label    string
+	element  string // type of element: button, tab, label, etc.
+}
+
+// SwitchResult represents the result of switching billing mode
+type SwitchResult struct {
+	success      bool
+	stateChanged bool
+	reason       string
+}
+
+// findToggleControls finds monthly and yearly toggle controls
+func (s *PricingV2Service) findToggleControls(ctx context.Context) (monthly, yearly ToggleControl) {
+	var controlsJSON string
 	
 	err := chromedp.Run(ctx,
 		chromedp.Evaluate(`
 			(() => {
-				const tabs = [];
+				const controls = [];
+				const monthlyKw = ['monthly', 'month', '/mo', 'per month', 'mo', 'pay monthly'];
+				const yearlyKw = ['yearly', 'annual', 'annually', 'year', '/yr', 'per year', 'pay annually', 'billed annually', 'save'];
+				
+				function scoreText(text, keywords) {
+					const normalized = text.toLowerCase().replace(/\s+/g, ' ').trim();
+					let score = 0;
+					for (const kw of keywords) {
+						if (normalized.includes(kw)) {
+							score += 10;
+							if (normalized === kw) score += 20;
+						}
+					}
+					return score;
+				}
+				
+				function findClickable(el) {
+					// Find nearest clickable ancestor
+					let current = el;
+					while (current && current !== document.body) {
+						if (current.tagName === 'BUTTON' || 
+						    current.getAttribute('role') === 'tab' ||
+						    current.tagName === 'A' ||
+						    current.onclick ||
+						    current.hasAttribute('data-state') ||
+						    current.classList.contains('cursor-pointer')) {
+							return current;
+						}
+						current = current.parentElement;
+					}
+					return el;
+				}
+				
+				function getSelector(el, index) {
+					if (el.id) return '#' + el.id;
+					if (el.getAttribute('role') === 'tab') {
+						const tabs = document.querySelectorAll('[role="tab"]');
+						const idx = Array.from(tabs).indexOf(el);
+						if (idx >= 0) return '[role="tab"]:nth-of-type(' + (idx + 1) + ')';
+					}
+					// Fallback to nth-of-type
+					return el.tagName.toLowerCase() + ':nth-of-type(' + (index + 1) + ')';
+				}
 				
 				// Find role="tab" elements (highest priority)
 				document.querySelectorAll('[role="tab"]').forEach((el, i) => {
-					tabs.push({
-						selector: '[role="tab"]:nth-of-type(' + (i+1) + ')',
-						text: el.textContent.trim(),
-						ariaSelected: el.getAttribute('aria-selected'),
-						ariaControls: el.getAttribute('aria-controls'),
-						type: 'role-tab'
+					const text = el.textContent.trim();
+					const clickable = findClickable(el);
+					controls.push({
+						selector: getSelector(clickable, i),
+						label: text,
+						element: 'role-tab',
+						monthlyScore: scoreText(text, monthlyKw),
+						yearlyScore: scoreText(text, yearlyKw),
+						ariaSelected: el.getAttribute('aria-selected')
 					});
 				});
 				
-				// Find tablist children
-				document.querySelectorAll('[role="tablist"] > *').forEach((el, i) => {
-					if (!el.hasAttribute('role') || el.getAttribute('role') !== 'tab') {
-						tabs.push({
-							selector: '[role="tablist"] > *:nth-child(' + (i+1) + ')',
-							text: el.textContent.trim(),
-							ariaSelected: el.getAttribute('aria-selected'),
-							type: 'tablist-child'
+				// Find buttons with billing keywords
+				document.querySelectorAll('button, [role="button"]').forEach((el, i) => {
+					const text = el.textContent.trim();
+					const mScore = scoreText(text, monthlyKw);
+					const yScore = scoreText(text, yearlyKw);
+					if (mScore > 0 || yScore > 0) {
+						controls.push({
+							selector: getSelector(el, i),
+							label: text,
+							element: 'button',
+							monthlyScore: mScore,
+							yearlyScore: yScore,
+							ariaSelected: el.getAttribute('aria-selected')
 						});
 					}
 				});
 				
-				// Find button elements with billing keywords
-				document.querySelectorAll('button').forEach((el, i) => {
-					const text = el.textContent.toLowerCase();
-					if (text.includes('month') || text.includes('year') || text.includes('annual') || 
-					    text.includes('/mo') || text.includes('/yr') || text.includes('save')) {
-						tabs.push({
-							selector: 'button:nth-of-type(' + (i+1) + ')',
-							text: el.textContent.trim(),
-							ariaSelected: el.getAttribute('aria-selected'),
-							type: 'button'
+				// Find labels (for toggle switches)
+				document.querySelectorAll('label, span').forEach((el, i) => {
+					const text = el.textContent.trim();
+					if (text.length > 50) return; // Skip long text
+					const mScore = scoreText(text, monthlyKw);
+					const yScore = scoreText(text, yearlyKw);
+					if (mScore > 0 || yScore > 0) {
+						const clickable = findClickable(el);
+						controls.push({
+							selector: getSelector(clickable, i),
+							label: text,
+							element: 'label-span',
+							monthlyScore: mScore,
+							yearlyScore: yScore
 						});
 					}
 				});
 				
-				// Find label elements (for toggle switches)
-				document.querySelectorAll('label').forEach((el, i) => {
-					const text = el.textContent.toLowerCase();
-					if (text.includes('month') || text.includes('year') || text.includes('annual')) {
-						tabs.push({
-							selector: 'label:nth-of-type(' + (i+1) + ')',
-							text: el.textContent.trim(),
-							type: 'label'
-						});
-					}
-				});
-				
-				return JSON.stringify(tabs);
+				return JSON.stringify(controls);
 			})()
-		`, &tabsJSON),
+		`, &controlsJSON),
 	)
 	
 	if err != nil {
-		log.Printf("[pricing-v2] failed to find tabs: %v", err)
-		return "", ""
+		log.Printf("[pricing-v2] failed to find toggle controls: %v", err)
+		return
 	}
 
-	var tabs []struct {
-		Selector     string `json:"selector"`
-		Text         string `json:"text"`
-		AriaSelected string `json:"ariaSelected"`
-		AriaControls string `json:"ariaControls"`
-		Type         string `json:"type"`
+	var controls []struct {
+		Selector      string `json:"selector"`
+		Label         string `json:"label"`
+		Element       string `json:"element"`
+		MonthlyScore  int    `json:"monthlyScore"`
+		YearlyScore   int    `json:"yearlyScore"`
+		AriaSelected  string `json:"ariaSelected"`
 	}
 	
-	if err := json.Unmarshal([]byte(tabsJSON), &tabs); err != nil {
-		log.Printf("[pricing-v2] failed to parse tabs JSON: %v", err)
-		return "", ""
+	if err := json.Unmarshal([]byte(controlsJSON), &controls); err != nil {
+		log.Printf("[pricing-v2] failed to parse controls JSON: %v", err)
+		return
 	}
 
-	// Score each tab for monthly/yearly
-	var monthlyBest, yearlyBest struct {
-		selector string
-		score    int
+	// Find best monthly and yearly controls
+	var bestMonthly, bestYearly struct {
+		control ToggleControl
+		score   int
 	}
 
-	for _, tab := range tabs {
-		monthlyScore := s.scoreTabText(tab.Text, monthlyKeywords)
-		yearlyScore := s.scoreTabText(tab.Text, yearlyKeywords)
-		
-		// Bonus for role="tab" elements
-		if tab.Type == "role-tab" {
-			monthlyScore += 5
-			yearlyScore += 5
+	for _, c := range controls {
+		// Bonus for role=tab
+		bonus := 0
+		if c.Element == "role-tab" {
+			bonus = 15
 		}
 		
-		// Bonus for aria-selected attribute (indicates it's a real tab)
-		if tab.AriaSelected != "" {
-			monthlyScore += 3
-			yearlyScore += 3
-		}
-		
-		// Penalty if text contains both (ambiguous)
-		if monthlyScore > 0 && yearlyScore > 0 {
-			// Keep only the higher score
-			if monthlyScore > yearlyScore {
-				yearlyScore = 0
-			} else {
-				monthlyScore = 0
+		// Only consider as monthly if monthly score > yearly score
+		if c.MonthlyScore > c.YearlyScore && c.MonthlyScore+bonus > bestMonthly.score {
+			bestMonthly.control = ToggleControl{
+				selector: c.Selector,
+				label:    c.Label,
+				element:  c.Element,
 			}
+			bestMonthly.score = c.MonthlyScore + bonus
 		}
 		
-		if monthlyScore > monthlyBest.score {
-			monthlyBest.selector = tab.Selector
-			monthlyBest.score = monthlyScore
-		}
-		
-		if yearlyScore > yearlyBest.score {
-			yearlyBest.selector = tab.Selector
-			yearlyBest.score = yearlyScore
+		// Only consider as yearly if yearly score > monthly score
+		if c.YearlyScore > c.MonthlyScore && c.YearlyScore+bonus > bestYearly.score {
+			bestYearly.control = ToggleControl{
+				selector: c.Selector,
+				label:    c.Label,
+				element:  c.Element,
+			}
+			bestYearly.score = c.YearlyScore + bonus
 		}
 	}
 
-	log.Printf("[pricing-v2] found monthly tab: %s (score=%d), yearly tab: %s (score=%d)", 
-		monthlyBest.selector, monthlyBest.score, yearlyBest.selector, yearlyBest.score)
+	log.Printf("[pricing-v2] found monthly control: %s (%s, score=%d)", 
+		bestMonthly.control.label, bestMonthly.control.selector, bestMonthly.score)
+	log.Printf("[pricing-v2] found yearly control: %s (%s, score=%d)", 
+		bestYearly.control.label, bestYearly.control.selector, bestYearly.score)
 
-	return monthlyBest.selector, yearlyBest.selector
+	return bestMonthly.control, bestYearly.control
 }
 
-// clickTabWithVerification clicks a tab and verifies the state changed
-func (s *PricingV2Service) clickTabWithVerification(ctx context.Context, selector, billingType, previousText string) (success bool, newHTML, newText string) {
+// switchBillingMode switches to the target billing mode with verification
+func (s *PricingV2Service) switchBillingMode(ctx context.Context, target string, control ToggleControl, currentMode string) SwitchResult {
+	// If already in target mode, no need to switch
+	if currentMode == target {
+		log.Printf("[pricing-v2] already in %s mode, skipping switch", target)
+		return SwitchResult{success: true, stateChanged: false, reason: "already_in_mode"}
+	}
+
+	if control.selector == "" {
+		return SwitchResult{success: false, stateChanged: false, reason: "no_selector"}
+	}
+
+	// Get text before click
+	var textBefore string
+	chromedp.Run(ctx, chromedp.Text("body", &textBefore, chromedp.ByQuery))
+
+	// Try clicking with retry
 	maxRetries := 2
-	
 	for attempt := 0; attempt < maxRetries; attempt++ {
-		// Try to click the tab
+		log.Printf("[pricing-v2] switching to %s mode, attempt %d, selector: %s", target, attempt+1, control.selector)
+		
+		// Try to click
 		err := chromedp.Run(ctx,
-			chromedp.Click(selector, chromedp.ByQuery),
+			chromedp.Click(control.selector, chromedp.ByQuery),
 			chromedp.Sleep(1500*time.Millisecond),
 		)
 		
 		if err != nil {
-			log.Printf("[pricing-v2] click attempt %d failed for %s: %v", attempt+1, billingType, err)
+			log.Printf("[pricing-v2] click failed: %v", err)
 			continue
 		}
 
-		// Capture new state
-		var capturedHTML, capturedText string
-		err = chromedp.Run(ctx,
-			chromedp.InnerHTML("html", &capturedHTML, chromedp.ByQuery),
-			chromedp.Text("body", &capturedText, chromedp.ByQuery),
-		)
-		
-		if err != nil {
-			log.Printf("[pricing-v2] failed to capture state after clicking %s: %v", billingType, err)
-			continue
-		}
-
-		// Verify state changed using multiple indicators
-		stateChanged := s.verifyStateChange(ctx, capturedText, previousText, billingType)
+		// Verify state changed
+		stateChanged := s.verifyBillingModeChange(ctx, target, textBefore)
 		
 		if stateChanged {
-			log.Printf("[pricing-v2] successfully clicked %s tab (attempt %d)", billingType, attempt+1)
-			return true, capturedHTML, capturedText
+			return SwitchResult{success: true, stateChanged: true, reason: ""}
 		}
 		
-		log.Printf("[pricing-v2] state did not change after clicking %s (attempt %d)", billingType, attempt+1)
+		log.Printf("[pricing-v2] state did not change after click, attempt %d", attempt+1)
 	}
-	
-	return false, "", ""
+
+	return SwitchResult{success: false, stateChanged: false, reason: "toggle_failed_after_retries"}
 }
 
-// verifyStateChange checks if the page state actually changed after clicking a tab
-func (s *PricingV2Service) verifyStateChange(ctx context.Context, newText, previousText, billingType string) bool {
-	// Check 1: Text content changed significantly
-	if newText != previousText && len(newText) > 100 {
-		// Calculate similarity - if texts are very different, state changed
-		similarity := s.textSimilarity(previousText, newText)
-		if similarity < 0.95 { // Less than 95% similar means significant change
-			log.Printf("[pricing-v2] text changed (similarity: %.2f)", similarity)
+// verifyBillingModeChange checks if billing mode actually changed
+func (s *PricingV2Service) verifyBillingModeChange(ctx context.Context, target, textBefore string) bool {
+	var textAfter string
+	chromedp.Run(ctx, chromedp.Text("body", &textAfter, chromedp.ByQuery))
+
+	// Check 1: Text content changed
+	if textAfter != textBefore {
+		similarity := s.textSimilarity(textBefore, textAfter)
+		if similarity < 0.95 {
+			log.Printf("[pricing-v2] text changed significantly (similarity: %.2f)", similarity)
 			return true
 		}
 	}
 
-	// Check 2: Look for billing-specific indicators in new text
-	newTextLower := strings.ToLower(newText)
-	
-	if billingType == "monthly" {
-		// Should see monthly-specific text
-		monthlyIndicators := []string{"billed monthly", "/mo", "per month", "monthly billing"}
-		for _, indicator := range monthlyIndicators {
-			if strings.Contains(newTextLower, indicator) {
-				return true
-			}
-		}
-	} else if billingType == "yearly" {
-		// Should see yearly-specific text
-		yearlyIndicators := []string{"billed annually", "billed yearly", "/yr", "per year", "save", "annually"}
-		for _, indicator := range yearlyIndicators {
-			if strings.Contains(newTextLower, indicator) {
-				return true
-			}
-		}
-	}
-
-	// Check 3: Check for aria-selected change via JavaScript
+	// Check 2: aria-selected changed
 	var ariaChanged bool
 	chromedp.Run(ctx,
 		chromedp.Evaluate(`
@@ -647,11 +772,11 @@ func (s *PricingV2Service) verifyStateChange(ctx context.Context, newText, previ
 				for (const tab of tabs) {
 					if (tab.getAttribute('aria-selected') === 'true') {
 						const text = tab.textContent.toLowerCase();
-						const billingType = '`+billingType+`';
-						if (billingType === 'monthly' && (text.includes('month') || text.includes('/mo'))) {
+						const target = '`+target+`';
+						if (target === 'monthly' && (text.includes('month') || text.includes('/mo'))) {
 							return true;
 						}
-						if (billingType === 'yearly' && (text.includes('year') || text.includes('annual'))) {
+						if (target === 'yearly' && (text.includes('year') || text.includes('annual'))) {
 							return true;
 						}
 					}
@@ -660,19 +785,150 @@ func (s *PricingV2Service) verifyStateChange(ctx context.Context, newText, previ
 			})()
 		`, &ariaChanged),
 	)
-	
 	if ariaChanged {
 		return true
 	}
 
-	// Check 4: URL query parameter changed
-	var currentURL string
-	chromedp.Run(ctx, chromedp.Location(&currentURL))
-	if strings.Contains(strings.ToLower(currentURL), billingType) {
+	// Check 3: Price signals match target
+	newMode := s.detectCurrentBillingMode(textAfter)
+	if newMode == target {
 		return true
 	}
 
 	return false
+}
+
+// detectCurrentBillingMode detects the current billing mode from visible text
+func (s *PricingV2Service) detectCurrentBillingMode(text string) string {
+	textLower := strings.ToLower(text)
+	
+	monthlyCount := 0
+	yearlyCount := 0
+	
+	for _, signal := range monthlySignals {
+		monthlyCount += strings.Count(textLower, signal)
+	}
+	for _, signal := range yearlySignals {
+		yearlyCount += strings.Count(textLower, signal)
+	}
+	
+	// Check for price patterns
+	monthlyPriceRe := regexp.MustCompile(`\$\d+(?:\.\d{2})?\s*/\s*mo`)
+	yearlyPriceRe := regexp.MustCompile(`\$\d+(?:\.\d{2})?\s*/\s*(?:yr|year)`)
+	
+	monthlyCount += len(monthlyPriceRe.FindAllString(textLower, -1)) * 3
+	yearlyCount += len(yearlyPriceRe.FindAllString(textLower, -1)) * 3
+
+	if monthlyCount > yearlyCount {
+		return "monthly"
+	} else if yearlyCount > monthlyCount {
+		return "yearly"
+	}
+	return "unknown"
+}
+
+// hasMonthlyPrices checks if text contains monthly price signals
+func (s *PricingV2Service) hasMonthlyPrices(text string) bool {
+	textLower := strings.ToLower(text)
+	for _, signal := range monthlySignals {
+		if strings.Contains(textLower, signal) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasYearlyPrices checks if text contains yearly price signals
+func (s *PricingV2Service) hasYearlyPrices(text string) bool {
+	textLower := strings.ToLower(text)
+	for _, signal := range yearlySignals {
+		if strings.Contains(textLower, signal) {
+			return true
+		}
+	}
+	return false
+}
+
+// expandFeatureSections scrolls and clicks expand buttons to reveal features
+func (s *PricingV2Service) expandFeatureSections(ctx context.Context) {
+	// Auto-scroll to trigger lazy loading
+	chromedp.Run(ctx,
+		chromedp.Evaluate(`window.scrollTo(0, document.body.scrollHeight)`, nil),
+		chromedp.Sleep(1*time.Second),
+		chromedp.Evaluate(`window.scrollTo(0, 0)`, nil),
+		chromedp.Sleep(500*time.Millisecond),
+	)
+
+	// Find and click expand buttons (up to 5)
+	var expandButtonsJSON string
+	chromedp.Run(ctx,
+		chromedp.Evaluate(`
+			(() => {
+				const expandKw = ['see all', 'show more', 'compare', 'all features', 'view features', 'expand', 'show all', 'more features'];
+				const buttons = [];
+				
+				document.querySelectorAll('button, a, [role="button"], span, div').forEach((el, i) => {
+					const text = el.textContent.toLowerCase().trim();
+					if (text.length > 50) return;
+					
+					for (const kw of expandKw) {
+						if (text.includes(kw)) {
+							buttons.push({
+								selector: el.id ? '#' + el.id : el.tagName.toLowerCase() + '[data-expand-idx="' + i + '"]',
+								text: text,
+								index: i
+							});
+							el.setAttribute('data-expand-idx', i);
+							break;
+						}
+					}
+				});
+				
+				return JSON.stringify(buttons.slice(0, 5));
+			})()
+		`, &expandButtonsJSON),
+	)
+
+	var expandButtons []struct {
+		Selector string `json:"selector"`
+		Text     string `json:"text"`
+		Index    int    `json:"index"`
+	}
+	
+	if err := json.Unmarshal([]byte(expandButtonsJSON), &expandButtons); err == nil {
+		for _, btn := range expandButtons {
+			log.Printf("[pricing-v2] clicking expand button: %s", btn.Text)
+			chromedp.Run(ctx,
+				chromedp.Click(btn.Selector, chromedp.ByQuery),
+				chromedp.Sleep(500*time.Millisecond),
+			)
+		}
+	}
+}
+
+// Debug artifact helpers
+func (s *PricingV2Service) saveDebugArtifact(dir, filename, content string) {
+	if !s.isStaging {
+		return
+	}
+	path := filepath.Join(dir, filename)
+	os.WriteFile(path, []byte(content), 0644)
+}
+
+func (s *PricingV2Service) saveDebugArtifacts(dir string, artifacts *DebugArtifacts) {
+	if !s.isStaging {
+		return
+	}
+	data, _ := json.MarshalIndent(artifacts, "", "  ")
+	os.WriteFile(filepath.Join(dir, "artifacts.json"), data, 0644)
+}
+
+func (s *PricingV2Service) takeScreenshot(ctx context.Context, path string) {
+	var buf []byte
+	chromedp.Run(ctx, chromedp.CaptureScreenshot(&buf))
+	if len(buf) > 0 {
+		os.WriteFile(path, buf, 0644)
+	}
 }
 
 // textSimilarity calculates a simple similarity ratio between two texts
@@ -681,7 +937,6 @@ func (s *PricingV2Service) textSimilarity(text1, text2 string) float64 {
 		return 1.0
 	}
 	
-	// Simple word-based similarity
 	words1 := strings.Fields(strings.ToLower(text1))
 	words2 := strings.Fields(strings.ToLower(text2))
 	
@@ -701,7 +956,6 @@ func (s *PricingV2Service) textSimilarity(text1, text2 string) float64 {
 		}
 	}
 	
-	// Jaccard-like similarity
 	return float64(matches) / float64(len(words1)+len(words2)-matches)
 }
 
@@ -711,7 +965,6 @@ func (s *PricingV2Service) deduplicatePlans(plans []model.ExtractedPlan) []model
 		return plans
 	}
 
-	// Map to store deduplicated plans by canonical key
 	deduped := make(map[string]model.ExtractedPlan)
 	
 	for _, plan := range plans {
@@ -723,18 +976,15 @@ func (s *PricingV2Service) deduplicatePlans(plans []model.ExtractedPlan) []model
 			continue
 		}
 		
-		// Merge: prefer plan with more features/units/evidence
 		merged := s.mergePlans(existing, plan)
 		deduped[key] = merged
 	}
 
-	// Convert back to slice
 	result := make([]model.ExtractedPlan, 0, len(deduped))
 	for _, plan := range deduped {
 		result = append(result, plan)
 	}
 	
-	// Sort by name and billing period for consistent ordering
 	sort.Slice(result, func(i, j int) bool {
 		if result[i].Name != result[j].Name {
 			return result[i].Name < result[j].Name
@@ -746,62 +996,45 @@ func (s *PricingV2Service) deduplicatePlans(plans []model.ExtractedPlan) []model
 	return result
 }
 
-// canonicalPlanKey generates a unique key for deduplication
-// Key format: normalize(name) + "|" + billing_period + "|" + normalize(price)
 func (s *PricingV2Service) canonicalPlanKey(plan model.ExtractedPlan) string {
-	// Normalize name: lowercase, remove extra spaces, remove common suffixes
 	name := strings.ToLower(strings.TrimSpace(plan.Name))
 	name = regexp.MustCompile(`\s+`).ReplaceAllString(name, " ")
 	name = strings.TrimSuffix(name, " plan")
 	name = strings.TrimSuffix(name, " tier")
 	
-	// Normalize billing period
 	billing := strings.ToLower(plan.BillingPeriod)
 	if billing == "" {
 		billing = "unknown"
 	}
 	
-	// Normalize price: use price_amount or extract number from price_string
 	var priceKey string
 	if plan.PriceAmount > 0 {
 		priceKey = fmt.Sprintf("%.2f", plan.PriceAmount)
 	} else if plan.PriceString != "" {
-		// Extract first number from price string
 		re := regexp.MustCompile(`[\d,]+\.?\d*`)
 		if match := re.FindString(plan.PriceString); match != "" {
 			priceKey = strings.ReplaceAll(match, ",", "")
 		}
 	}
 	
-	// Don't use monthly_equivalent in key (as per spec)
 	return fmt.Sprintf("%s|%s|%s", name, billing, priceKey)
 }
 
-// mergePlans merges two plans, preferring the one with more data
 func (s *PricingV2Service) mergePlans(existing, new model.ExtractedPlan) model.ExtractedPlan {
 	result := existing
 	
-	// Prefer more features
 	if len(new.Features) > len(result.Features) {
 		result.Features = new.Features
 	}
-	
-	// Prefer more included units
 	if len(new.IncludedUnits) > len(result.IncludedUnits) {
 		result.IncludedUnits = new.IncludedUnits
 	}
-	
-	// Prefer evidence with more content
 	if len(new.Evidence.PriceSnippet) > len(result.Evidence.PriceSnippet) {
 		result.Evidence = new.Evidence
 	}
-	
-	// Fill in missing monthly equivalent
 	if result.MonthlyEquivalentAmount == 0 && new.MonthlyEquivalentAmount > 0 {
 		result.MonthlyEquivalentAmount = new.MonthlyEquivalentAmount
 	}
-	
-	// Fill in missing annual amount
 	if result.AnnualBilledAmount == 0 && new.AnnualBilledAmount > 0 {
 		result.AnnualBilledAmount = new.AnnualBilledAmount
 	}
@@ -813,17 +1046,13 @@ func (s *PricingV2Service) mergePlans(existing, new model.ExtractedPlan) model.E
 func (s *PricingV2Service) SavePlans(ctx context.Context, userID string, req model.PricingSaveRequest) (*model.PricingSaveResponse, error) {
 	uid, err := primitive.ObjectIDFromHex(userID)
 	if err != nil {
-		return &model.PricingSaveResponse{
-			Error: "invalid user ID",
-		}, nil
+		return &model.PricingSaveResponse{Error: "invalid user ID"}, nil
 	}
 
-	// Delete existing plans for this user (replace with new extraction)
 	if err := s.repo.DeleteByUserID(ctx, uid); err != nil {
 		log.Printf("[pricing-v2] failed to delete existing plans: %v", err)
 	}
 
-	// Convert and save
 	plans := make([]*model.PricingV2Plan, len(req.Plans))
 	for i, p := range req.Plans {
 		plans[i] = &model.PricingV2Plan{
@@ -847,14 +1076,10 @@ func (s *PricingV2Service) SavePlans(ctx context.Context, userID string, req mod
 
 	count, err := s.repo.CreateMany(ctx, plans)
 	if err != nil {
-		return &model.PricingSaveResponse{
-			Error: fmt.Sprintf("failed to save plans: %v", err),
-		}, nil
+		return &model.PricingSaveResponse{Error: fmt.Sprintf("failed to save plans: %v", err)}, nil
 	}
 
-	return &model.PricingSaveResponse{
-		SavedCount: count,
-	}, nil
+	return &model.PricingSaveResponse{SavedCount: count}, nil
 }
 
 // GetSavedPlans returns saved pricing v2 plans for a user
@@ -869,20 +1094,26 @@ func (s *PricingV2Service) GetSavedPlans(ctx context.Context, userID string) (*m
 		return nil, fmt.Errorf("failed to get plans: %w", err)
 	}
 
-	return &model.SavedPricingV2Response{
-		Plans: plans,
-		Count: len(plans),
-	}, nil
+	return &model.SavedPricingV2Response{Plans: plans, Count: len(plans)}, nil
 }
 
-// Updated LLM Extraction Prompt with strict billing period distinction and evidence requirements
+// E) Updated LLM Extraction Prompt with dual snapshot support
 const extractionPrompt = `You are a pricing data extraction specialist. Extract pricing plan information from the provided website content.
+
+IMPORTANT: You may receive TWO SNAPSHOTS - one for monthly billing and one for yearly billing. Extract plans from BOTH snapshots separately.
 
 STRICT RULES:
 1. ONLY extract information that is EXPLICITLY present in the content
 2. If a field is not found, use null - NEVER guess or invent data
 3. EVIDENCE IS REQUIRED: Include exact text snippets for every extracted value
 4. If billing period cannot be determined with evidence, set billing_period: "unknown" and add warning
+5. If features are not visible in the content, return empty features array and add warning "features_not_visible_for_[plan_name]"
+
+SNAPSHOT HANDLING:
+- If you see "SNAPSHOT: MONTHLY BILLING MODE", extract plans with billing_period: "monthly"
+- If you see "SNAPSHOT: YEARLY/ANNUAL BILLING MODE", extract plans with billing_period: "yearly"
+- Create SEPARATE plan entries for the same plan in different billing modes
+- The server will deduplicate, so err on the side of including both versions
 
 BILLING PERIOD DISTINCTION (CRITICAL):
 - MONTHLY PLAN (billed monthly): Customer pays every month
@@ -911,20 +1142,13 @@ Output ONLY valid JSON in this exact format:
       "billing_period": "monthly",
       "monthly_equivalent_amount": null,
       "annual_billed_amount": null,
-      "included_units": [
-        {
-          "name": "credits",
-          "amount": 7500,
-          "unit": "per seat per month",
-          "raw_text": "7,500 credits/seat/month"
-        }
-      ],
+      "included_units": [],
       "features": ["Feature 1", "Feature 2"],
       "evidence": {
         "name_snippet": "exact text where plan name appears",
         "price_snippet": "exact text showing the price AND billing period",
         "units_snippet": "exact text showing included units",
-        "billing_evidence": "exact text proving the billing period (e.g., 'billed monthly' or 'billed annually')"
+        "billing_evidence": "exact text proving the billing period"
       }
     }
   ],
@@ -934,29 +1158,18 @@ Output ONLY valid JSON in this exact format:
 
 EXAMPLES:
 
-Example 1 - Monthly plan:
-Text: "Pro Plan $12/mo billed monthly"
-Result: billing_period: "monthly", price_amount: 12, evidence.billing_evidence: "billed monthly"
+Example 1 - Same plan in both modes:
+From MONTHLY SNAPSHOT: "Pro $12/mo billed monthly" → billing_period: "monthly", price_amount: 12
+From YEARLY SNAPSHOT: "Pro $8/mo billed annually" → billing_period: "yearly", monthly_equivalent_amount: 8, annual_billed_amount: 96
 
-Example 2 - Yearly plan showing monthly equivalent:
-Text: "Pro Plan $10/mo billed annually"  
-Result: billing_period: "yearly", monthly_equivalent_amount: 10, annual_billed_amount: 120, evidence.billing_evidence: "billed annually"
-
-Example 3 - Yearly plan with direct price:
-Text: "Pro Plan $120/year"
-Result: billing_period: "yearly", price_amount: 120, price_frequency: "per_year", evidence.billing_evidence: "$120/year"
-
-Example 4 - Cannot determine billing:
-Text: "Pro Plan $12/mo" (no billing period indicator)
-Result: billing_period: "unknown", add to warnings: "billing_period_unverified_Pro_Plan"
+Example 2 - Features not visible:
+If no features are shown for a plan, return empty array and add to warnings: "features_not_visible_for_Pro"
 
 IMPORTANT:
-- Create SEPARATE entries for monthly and yearly versions of the same plan
-- If page shows "Pay monthly" and "Pay annually" sections, extract plans from BOTH sections
+- Extract plans from BOTH monthly and yearly snapshots if both are present
 - Currency: $ = USD, € = EUR, £ = GBP
-- If features are not visible, return empty array and add "features_not_visible" to warnings
-- If pricing requires login/contact sales, add "pricing_gated" to warnings
-- Always include billing_evidence in evidence object`
+- Always include billing_evidence in evidence object
+- If pricing requires login/contact sales, add "pricing_gated" to warnings`
 
 // extractWithLLM uses OpenAI to extract pricing from page content
 func (s *PricingV2Service) extractWithLLM(ctx context.Context, content, rawHTML, sourceURL string) ([]model.ExtractedPlan, []string, error) {
@@ -964,19 +1177,17 @@ func (s *PricingV2Service) extractWithLLM(ctx context.Context, content, rawHTML,
 		return nil, nil, fmt.Errorf("OpenAI API key not configured")
 	}
 
-	// Limit content size
-	if len(content) > 25000 {
-		content = content[:25000] + "\n...[truncated]"
+	if len(content) > 30000 {
+		content = content[:30000] + "\n...[truncated]"
 	}
 
-	userPrompt := fmt.Sprintf(`Extract pricing information from this page. Pay special attention to billing period evidence.
+	userPrompt := fmt.Sprintf(`Extract pricing information from this page. You may receive multiple snapshots for different billing modes.
 
 Source URL: %s
 
 Page Content:
 %s`, sourceURL, content)
 
-	// Call OpenAI
 	reqBody := map[string]interface{}{
 		"model": "gpt-4o-mini",
 		"messages": []map[string]string{
@@ -1034,7 +1245,6 @@ Page Content:
 		return nil, nil, fmt.Errorf("no response from OpenAI")
 	}
 
-	// Parse LLM response
 	response := strings.TrimSpace(apiResp.Choices[0].Message.Content)
 	response = strings.TrimPrefix(response, "```json")
 	response = strings.TrimPrefix(response, "```")
@@ -1054,7 +1264,7 @@ Page Content:
 	return result.Plans, result.Warnings, nil
 }
 
-// extractHiddenContent extracts content from hidden elements
+// Helper functions (unchanged)
 func (s *PricingV2Service) extractHiddenContent(htmlContent string) string {
 	doc, err := html.Parse(strings.NewReader(htmlContent))
 	if err != nil {
@@ -1066,12 +1276,10 @@ func (s *PricingV2Service) extractHiddenContent(htmlContent string) string {
 
 	extractHidden = func(n *html.Node) {
 		if n.Type == html.ElementNode {
-			// Skip script, style
 			if n.Data == "script" || n.Data == "style" || n.Data == "noscript" {
 				return
 			}
 
-			// Check for hidden attributes
 			isHidden := false
 			for _, attr := range n.Attr {
 				if attr.Key == "aria-hidden" && attr.Val == "true" {
@@ -1086,15 +1294,12 @@ func (s *PricingV2Service) extractHiddenContent(htmlContent string) string {
 				if attr.Key == "data-state" && (attr.Val == "inactive" || attr.Val == "hidden") {
 					isHidden = true
 				}
-				// Check for tab panels that might be hidden
 				if attr.Key == "role" && attr.Val == "tabpanel" {
-					// Extract this content as it might be alternate billing
 					isHidden = true
 				}
 			}
 
 			if isHidden {
-				// Extract text from this hidden element
 				var extractText func(*html.Node)
 				extractText = func(child *html.Node) {
 					if child.Type == html.TextNode {
@@ -1122,23 +1327,19 @@ func (s *PricingV2Service) extractHiddenContent(htmlContent string) string {
 	return strings.TrimSpace(hiddenText.String())
 }
 
-// extractScriptJSON extracts JSON data from script tags
 func (s *PricingV2Service) extractScriptJSON(htmlContent string) string {
 	var jsonData strings.Builder
 
-	// Pattern for __NEXT_DATA__
 	nextDataRe := regexp.MustCompile(`<script[^>]*id="__NEXT_DATA__"[^>]*>([\s\S]*?)</script>`)
 	if matches := nextDataRe.FindStringSubmatch(htmlContent); len(matches) > 1 {
-		// Parse and extract relevant pricing data
 		data := matches[1]
-		if len(data) < 50000 { // Limit size
+		if len(data) < 50000 {
 			jsonData.WriteString("NEXT_DATA: ")
 			jsonData.WriteString(s.extractPricingFromJSON(data))
 			jsonData.WriteString("\n")
 		}
 	}
 
-	// Pattern for ld+json (structured data)
 	ldJsonRe := regexp.MustCompile(`<script[^>]*type="application/ld\+json"[^>]*>([\s\S]*?)</script>`)
 	ldMatches := ldJsonRe.FindAllStringSubmatch(htmlContent, -1)
 	for _, match := range ldMatches {
@@ -1149,7 +1350,6 @@ func (s *PricingV2Service) extractScriptJSON(htmlContent string) string {
 		}
 	}
 
-	// Pattern for __NUXT__
 	nuxtRe := regexp.MustCompile(`window\.__NUXT__\s*=\s*(\{[\s\S]*?\});?\s*</script>`)
 	if matches := nuxtRe.FindStringSubmatch(htmlContent); len(matches) > 1 {
 		data := matches[1]
@@ -1163,9 +1363,7 @@ func (s *PricingV2Service) extractScriptJSON(htmlContent string) string {
 	return strings.TrimSpace(jsonData.String())
 }
 
-// extractPricingFromJSON tries to find pricing-related data in JSON
 func (s *PricingV2Service) extractPricingFromJSON(jsonStr string) string {
-	// Look for pricing-related keys
 	pricingPatterns := []string{
 		`"price"`, `"pricing"`, `"plans"`, `"subscription"`,
 		`"monthly"`, `"yearly"`, `"annual"`, `"billing"`,
@@ -1183,18 +1381,15 @@ func (s *PricingV2Service) extractPricingFromJSON(jsonStr string) string {
 		return ""
 	}
 
-	// Return a truncated version
 	if len(jsonStr) > 5000 {
 		return jsonStr[:5000] + "...[truncated]"
 	}
 	return jsonStr
 }
 
-// detectBillingToggle checks if the page has a billing toggle
 func (s *PricingV2Service) detectBillingToggle(visibleText, rawHTML string) bool {
 	contentLower := strings.ToLower(visibleText + " " + rawHTML)
 
-	// Check for toggle indicators
 	toggleCount := 0
 	for _, indicator := range toggleIndicators {
 		if strings.Contains(contentLower, indicator) {
@@ -1202,17 +1397,13 @@ func (s *PricingV2Service) detectBillingToggle(visibleText, rawHTML string) bool
 		}
 	}
 
-	// Check for tab/switch elements in HTML
 	hasTabList := strings.Contains(rawHTML, `role="tablist"`) ||
 		strings.Contains(rawHTML, `role="tab"`) ||
 		strings.Contains(rawHTML, "toggle") ||
 		strings.Contains(rawHTML, "switch")
 
-	// Need multiple toggle indicators or tablist to confirm
 	return toggleCount >= 2 || (toggleCount >= 1 && hasTabList)
 }
-
-// Helper functions
 
 func (s *PricingV2Service) normalizeURL(rawURL string) string {
 	rawURL = strings.TrimSpace(rawURL)
@@ -1220,18 +1411,15 @@ func (s *PricingV2Service) normalizeURL(rawURL string) string {
 		return ""
 	}
 
-	// Add https if no scheme
 	if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
 		rawURL = "https://" + rawURL
 	}
 
-	// Parse and normalize
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
 		return ""
 	}
 
-	// Ensure trailing slash for root
 	if parsed.Path == "" {
 		parsed.Path = "/"
 	}
@@ -1245,18 +1433,15 @@ func (s *PricingV2Service) validateURL(rawURL string) error {
 		return fmt.Errorf("invalid URL format")
 	}
 
-	// Only allow http/https
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
 		return fmt.Errorf("only http/https URLs allowed")
 	}
 
-	// Block localhost and private IPs
 	host := parsed.Hostname()
 	if host == "localhost" || host == "127.0.0.1" || host == "0.0.0.0" {
 		return fmt.Errorf("localhost not allowed")
 	}
 
-	// Check for private IP ranges
 	ip := net.ParseIP(host)
 	if ip != nil {
 		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() {
@@ -1302,7 +1487,6 @@ func (s *PricingV2Service) fetchPageContent(ctx context.Context, pageURL string)
 		return "", "", fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
-	// Limit response size
 	limitedReader := io.LimitReader(resp.Body, maxResponseSize)
 	body, err := io.ReadAll(limitedReader)
 	if err != nil {
@@ -1318,7 +1502,6 @@ func (s *PricingV2Service) fetchPageContent(ctx context.Context, pageURL string)
 func (s *PricingV2Service) extractVisibleText(htmlContent string) string {
 	doc, err := html.Parse(strings.NewReader(htmlContent))
 	if err != nil {
-		// Fallback: strip HTML tags with regex
 		re := regexp.MustCompile(`<[^>]*>`)
 		return re.ReplaceAllString(htmlContent, " ")
 	}
@@ -1327,14 +1510,12 @@ func (s *PricingV2Service) extractVisibleText(htmlContent string) string {
 	var extractText func(*html.Node)
 
 	extractText = func(n *html.Node) {
-		// Skip script, style, and hidden elements
 		if n.Type == html.ElementNode {
 			switch n.Data {
 			case "script", "style", "noscript", "head", "meta", "link":
 				return
 			}
 
-			// Skip hidden elements for visible text
 			for _, attr := range n.Attr {
 				if attr.Key == "aria-hidden" && attr.Val == "true" {
 					return
@@ -1360,7 +1541,6 @@ func (s *PricingV2Service) extractVisibleText(htmlContent string) string {
 
 	extractText(doc)
 
-	// Clean up whitespace
 	result := textBuilder.String()
 	result = regexp.MustCompile(`\s+`).ReplaceAllString(result, " ")
 	return strings.TrimSpace(result)
