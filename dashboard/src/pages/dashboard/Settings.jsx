@@ -248,7 +248,7 @@ const Settings = () => {
         </div>
       </div>
 
-      <div className="space-y-8 max-w-5xl">
+      <div className="space-y-8">
         {/* Profile & Workspace Section */}
         <div className="relative group">
           <div className="absolute -inset-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 rounded-3xl blur opacity-10 group-hover:opacity-20 transition-opacity" />

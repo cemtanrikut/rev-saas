@@ -63,63 +63,94 @@ const Sidebar = () => {
   };
 
   return (
-    <div className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col h-screen sticky top-0">
+    <div className="w-64 bg-slate-950 border-r border-slate-800/50 flex flex-col h-screen sticky top-0">
       {/* Logo */}
-      <div className="p-6 border-b border-slate-800">
-        <img 
-          src="/revalyze-logo.png" 
-          alt="Revalyze" 
-          className="h-10 w-auto"
-        />
+      <div className="p-6 border-b border-slate-800/50">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-gradient-to-br from-violet-500 to-fuchsia-600 rounded-xl flex items-center justify-center shadow-lg shadow-violet-500/20">
+            <img 
+              src="/revalyze-logo.png" 
+              alt="Revalyze" 
+              className="h-6 w-auto"
+              onError={(e) => {
+                e.target.style.display = 'none';
+                e.target.nextSibling.style.display = 'block';
+              }}
+            />
+            <span className="text-white font-bold text-lg hidden">R</span>
+          </div>
+          <span className="text-xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
+            Revalyze
+          </span>
+        </div>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-1">
+      <nav className="flex-1 p-4 space-y-1.5 overflow-y-auto">
         {navItems.map((item) => (
           <NavLink
             key={item.path}
             to={item.path}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all ${
+              `group flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
                 isActive
-                  ? 'bg-blue-500/10 text-blue-400 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800'
+                  ? 'bg-gradient-to-r from-violet-500/20 to-fuchsia-500/10 text-white border border-violet-500/30 shadow-lg shadow-violet-500/5'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800/50 border border-transparent'
               }`
             }
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              {item.icon}
-            </svg>
-            {item.name}
-            {item.badge && (
-              <span className="ml-auto text-[10px] font-semibold bg-gradient-to-r from-purple-500 to-blue-500 text-white px-1.5 py-0.5 rounded">
-                {item.badge}
-              </span>
+            {({ isActive }) => (
+              <>
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
+                  isActive 
+                    ? 'bg-gradient-to-br from-violet-500 to-fuchsia-600 shadow-md shadow-violet-500/30' 
+                    : 'bg-slate-800/50 group-hover:bg-slate-700/50'
+                }`}>
+                  <svg className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    {item.icon}
+                  </svg>
+                </div>
+                <span className="text-sm">{item.name}</span>
+                {item.badge && (
+                  <span className="ml-auto text-[10px] font-semibold bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white px-2 py-0.5 rounded-full">
+                    {item.badge}
+                  </span>
+                )}
+              </>
             )}
           </NavLink>
         ))}
       </nav>
 
       {/* User & Logout */}
-      <div className="p-4 border-t border-slate-800 space-y-3">
+      <div className="p-4 border-t border-slate-800/50 space-y-3">
         {user && (
-          <div className="px-4 py-2">
-            <p className="text-xs text-slate-500">Signed in as</p>
-            <p className="text-sm text-slate-300 truncate">{user.email}</p>
+          <div className="px-3 py-3 bg-slate-900/50 rounded-xl border border-slate-800/50">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-gradient-to-br from-violet-500 to-fuchsia-600 rounded-lg flex items-center justify-center text-white font-semibold text-sm shadow-md">
+                {user.email ? user.email.substring(0, 2).toUpperCase() : 'U'}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-slate-500">Signed in as</p>
+                <p className="text-sm text-slate-300 truncate">{user.email}</p>
+              </div>
+            </div>
           </div>
         )}
         
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-all"
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-slate-400 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all duration-200"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-          </svg>
-          Sign Out
+          <div className="w-8 h-8 rounded-lg bg-slate-800/50 flex items-center justify-center group-hover:bg-red-500/10 transition-all">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+          </div>
+          <span className="text-sm">Sign Out</span>
         </button>
 
-        <p className="text-xs text-slate-500 text-center">
+        <p className="text-[11px] text-slate-600 text-center pt-2">
           © {new Date().getFullYear()} Revalyze B.V.
         </p>
       </div>

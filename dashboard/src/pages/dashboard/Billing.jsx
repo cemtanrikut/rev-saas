@@ -253,7 +253,7 @@ const Billing = () => {
         </div>
       )}
 
-      <div className="space-y-8 max-w-7xl">
+      <div className="space-y-8">
         {/* Current Plan & Credits Section */}
         <div className="grid md:grid-cols-3 gap-6">
           {/* Current Plan */}
