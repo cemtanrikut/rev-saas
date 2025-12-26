@@ -49,7 +49,8 @@ const PlansV2 = () => {
     try {
       setIsLoadingSaved(true);
       const response = await pricingV2Api.list();
-      setSavedPlans(response.plans || []);
+      const data = response.data || response;
+      setSavedPlans(data.plans || []);
     } catch (err) {
       console.error('Failed to load saved plans:', err);
     } finally {
@@ -71,19 +72,20 @@ const PlansV2 = () => {
 
     try {
       const response = await pricingV2Api.discover({ website_url: websiteUrl });
+      const data = response.data || response; // Handle both wrapped and unwrapped responses
       
-      if (response.error) {
-        setDiscoverError(response.error);
+      if (data.error) {
+        setDiscoverError(data.error);
         setShowManualInput(true);
         return;
       }
 
-      setCandidates(response.pricing_candidates || []);
+      setCandidates(data.pricing_candidates || []);
       
-      if (response.selected_pricing_url) {
-        setPricingUrl(response.selected_pricing_url);
+      if (data.selected_pricing_url) {
+        setPricingUrl(data.selected_pricing_url);
         // Auto-extract
-        await handleExtract(response.selected_pricing_url);
+        await handleExtract(data.selected_pricing_url);
       } else {
         setShowManualInput(true);
         setDiscoverError('Could not auto-detect pricing page. Please enter the URL manually.');
@@ -112,19 +114,20 @@ const PlansV2 = () => {
 
     try {
       const response = await pricingV2Api.extract({ pricing_url: targetUrl });
+      const data = response.data || response;
       
-      if (response.error) {
-        setExtractError(response.error);
+      if (data.error) {
+        setExtractError(data.error);
         return;
       }
 
       setPricingUrl(targetUrl);
-      setExtractedPlans(response.plans || []);
-      setDetectedPeriods(response.detected_periods || []);
-      setWarnings(response.warnings || []);
+      setExtractedPlans(data.plans || []);
+      setDetectedPeriods(data.detected_periods || []);
+      setWarnings(data.warnings || []);
       
       // Auto-select all plans
-      const allIds = new Set(response.plans?.map((_, i) => i) || []);
+      const allIds = new Set(data.plans?.map((_, i) => i) || []);
       setSelectedPlans(allIds);
     } catch (err) {
       setExtractError(err.message || 'Extraction failed');
@@ -152,19 +155,20 @@ const PlansV2 = () => {
         yearly_text: yearlyText.trim(),
         website_url: websiteUrl.trim() || undefined
       });
+      const data = response.data || response;
       
-      if (response.error) {
-        setExtractError(response.error);
+      if (data.error) {
+        setExtractError(data.error);
         return;
       }
 
       setPricingUrl('pasted-text');
-      setExtractedPlans(response.plans || []);
-      setDetectedPeriods(response.detected_periods || []);
-      setWarnings(response.warnings || []);
+      setExtractedPlans(data.plans || []);
+      setDetectedPeriods(data.detected_periods || []);
+      setWarnings(data.warnings || []);
       
       // Auto-select all plans
-      const allIds = new Set(response.plans?.map((_, i) => i) || []);
+      const allIds = new Set(data.plans?.map((_, i) => i) || []);
       setSelectedPlans(allIds);
     } catch (err) {
       setExtractError(err.message || 'Extraction from pasted text failed');
@@ -189,9 +193,10 @@ const PlansV2 = () => {
         source_url: pricingUrl,
         website_url: websiteUrl
       });
+      const data = response.data || response;
 
-      if (response.error) {
-        setExtractError(response.error);
+      if (data.error) {
+        setExtractError(data.error);
         return;
       }
 
