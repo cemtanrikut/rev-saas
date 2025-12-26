@@ -36,9 +36,10 @@ type IncludedUnit struct {
 
 // PlanEvidence contains evidence snippets from the source
 type PlanEvidence struct {
-	NameSnippet  string `json:"name_snippet" bson:"name_snippet"`
-	PriceSnippet string `json:"price_snippet" bson:"price_snippet"`
-	UnitsSnippet string `json:"units_snippet" bson:"units_snippet"`
+	NameSnippet     string `json:"name_snippet" bson:"name_snippet"`
+	PriceSnippet    string `json:"price_snippet" bson:"price_snippet"`
+	UnitsSnippet    string `json:"units_snippet" bson:"units_snippet"`
+	BillingEvidence string `json:"billing_evidence" bson:"billing_evidence"` // evidence proving billing period
 }
 
 // PricingDiscoverRequest is the request for discover endpoint
