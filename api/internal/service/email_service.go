@@ -37,7 +37,7 @@ func NewEmailService(host, port, user, password, from, appPublicURL string) *Ema
 			From:     from,
 		},
 		appPublicURL: appPublicURL,
-		logoURL:      "", // Set via SetLogoURL or environment variable
+		logoURL:      "https://i.imgur.com/x8SISLw.png", // Revalyze logo hosted on Imgur
 	}
 }
 
@@ -306,7 +306,7 @@ func (s *EmailService) SendVerificationEmail(ctx context.Context, toEmail, token
                 Didn't sign up for Revalyze? You can safely ignore this email.
               </p>
               <p style="margin: 16px 0 0 0; font-size: 12px; color: #475569;">
-                &copy; 2025 Revalyze B.V. &bull; Amsterdam, Netherlands
+                &copy; 2025 Revalyze B.V. &bull; Utrecht, Netherlands
               </p>
             </td>
           </tr>
@@ -340,7 +340,7 @@ func (s *EmailService) SendWelcomeEmail(ctx context.Context, toEmail string) err
   <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%" style="background-color: #0f172a;">
     <tr>
       <td style="padding: 48px 24px;">
-        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%" style="max-width: 560px; margin: 0 auto;">
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%" style="max-width: 600px; margin: 0 auto;">
           
           <!-- Celebration Header -->
           <tr>
@@ -359,108 +359,156 @@ func (s *EmailService) SendWelcomeEmail(ctx context.Context, toEmail string) err
           <!-- Main Card -->
           <tr>
             <td>
-              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%" style="background-color: #1e293b; border-radius: 16px; border: 1px solid #334155; position: relative;">
-                
-                <!-- Decorative side characters -->
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%" style="background-color: #1e293b; border-radius: 16px; border: 1px solid #334155;">
                 <tr>
-                  <td style="padding: 0;">
+                  <td style="padding: 40px 32px;">
+                    
+                    <!-- Success Badge -->
                     <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%">
                       <tr>
-                        <td style="width: 50px; vertical-align: top; padding-top: 40px; text-align: center;">
-                          <span style="font-size: 32px;">&#129395;</span>
+                        <td style="text-align: center; padding-bottom: 20px;">
+                          <span style="display: inline-block; background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%%, rgba(6, 182, 212, 0.2) 100%%); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 50px; padding: 8px 20px; font-size: 14px; color: #10b981; font-weight: 600;">
+                            &#10003; Email Verified
+                          </span>
                         </td>
-                        <td style="padding: 40px 20px;">
-                          
-                          <!-- Success Badge -->
+                      </tr>
+                    </table>
+                    
+                    <!-- Title -->
+                    <h1 style="margin: 0 0 8px 0; font-size: 32px; font-weight: 700; color: #f8fafc; text-align: center; letter-spacing: -0.5px;">
+                      Welcome aboard!
+                    </h1>
+                    
+                    <!-- Subtitle -->
+                    <p style="margin: 0 0 32px 0; font-size: 18px; line-height: 1.6; color: #94a3b8; text-align: center;">
+                      You're all set to optimize your SaaS pricing strategy
+                    </p>
+                    
+                    <!-- CTA Button -->
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%">
+                      <tr>
+                        <td style="text-align: center; padding-bottom: 32px;">
+                          <a href="%s" style="display: inline-block; padding: 18px 56px; background: linear-gradient(135deg, #8b5cf6 0%%, #d946ef 100%%); color: #ffffff; text-decoration: none; font-weight: 600; font-size: 16px; border-radius: 12px; box-shadow: 0 8px 24px -8px rgba(139, 92, 246, 0.5);">
+                            Go to Dashboard &#8594;
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                    
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Section Title: What You Can Do -->
+          <tr>
+            <td style="padding: 32px 0 16px 0; text-align: center;">
+              <h2 style="margin: 0; font-size: 20px; font-weight: 600; color: #f8fafc;">
+                &#10024; What You Can Do
+              </h2>
+            </td>
+          </tr>
+          
+          <!-- Feature Cards - 3 Separate Boxes -->
+          <tr>
+            <td>
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%">
+                
+                <!-- Card 1: Discover Competitors -->
+                <tr>
+                  <td style="padding-bottom: 12px;">
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%" style="background: linear-gradient(135deg, #1e293b 0%%, #0f172a 100%%); border-radius: 12px; border: 1px solid #334155;">
+                      <tr>
+                        <td style="padding: 20px 24px;">
                           <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%">
                             <tr>
-                              <td style="text-align: center; padding-bottom: 20px;">
-                                <span style="display: inline-block; background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%%, rgba(6, 182, 212, 0.2) 100%%); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 50px; padding: 8px 20px; font-size: 14px; color: #10b981; font-weight: 600;">
-                                  &#10003; Email Verified
-                                </span>
+                              <td style="width: 48px; vertical-align: middle;">
+                                <div style="width: 44px; height: 44px; background: linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%%, rgba(217, 70, 239, 0.2) 100%%); border-radius: 10px; text-align: center; line-height: 44px;">
+                                  <span style="font-size: 22px;">&#128269;</span>
+                                </div>
+                              </td>
+                              <td style="padding-left: 16px; vertical-align: middle;">
+                                <p style="margin: 0 0 4px 0; font-size: 16px; font-weight: 600; color: #f8fafc;">Discover Competitors</p>
+                                <p style="margin: 0; font-size: 14px; color: #94a3b8;">AI finds and tracks your competitors automatically</p>
                               </td>
                             </tr>
                           </table>
-                          
-                          <!-- Title -->
-                          <h1 style="margin: 0 0 8px 0; font-size: 32px; font-weight: 700; color: #f8fafc; text-align: center; letter-spacing: -0.5px;">
-                            Welcome aboard!
-                          </h1>
-                          
-                          <!-- Subtitle -->
-                          <p style="margin: 0 0 28px 0; font-size: 18px; line-height: 1.6; color: #94a3b8; text-align: center;">
-                            You're all set to optimize your SaaS pricing
-                          </p>
-                          
-                          <!-- Features Grid -->
-                          <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%" style="margin-bottom: 28px;">
-                            <tr>
-                              <td style="padding: 16px; background-color: #0f172a; border-radius: 12px; border: 1px solid #334155;">
-                                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%">
-                                  <tr>
-                                    <td style="padding-bottom: 14px;">
-                                      <table role="presentation" cellspacing="0" cellpadding="0" border="0">
-                                        <tr>
-                                          <td style="width: 36px; vertical-align: top; padding-right: 12px;">
-                                            <span style="font-size: 20px;">&#128269;</span>
-                                          </td>
-                                          <td style="font-size: 14px; color: #cbd5e1; line-height: 1.5;">
-                                            <strong style="color: #f8fafc;">Discover Competitors</strong><br/>
-                                            <span style="color: #94a3b8;">AI-powered competitor detection</span>
-                                          </td>
-                                        </tr>
-                                      </table>
-                                    </td>
-                                  </tr>
-                                  <tr>
-                                    <td style="padding-bottom: 14px;">
-                                      <table role="presentation" cellspacing="0" cellpadding="0" border="0">
-                                        <tr>
-                                          <td style="width: 36px; vertical-align: top; padding-right: 12px;">
-                                            <span style="font-size: 20px;">&#128161;</span>
-                                          </td>
-                                          <td style="font-size: 14px; color: #cbd5e1; line-height: 1.5;">
-                                            <strong style="color: #f8fafc;">Smart Insights</strong><br/>
-                                            <span style="color: #94a3b8;">Data-driven pricing recommendations</span>
-                                          </td>
-                                        </tr>
-                                      </table>
-                                    </td>
-                                  </tr>
-                                  <tr>
-                                    <td>
-                                      <table role="presentation" cellspacing="0" cellpadding="0" border="0">
-                                        <tr>
-                                          <td style="width: 36px; vertical-align: top; padding-right: 12px;">
-                                            <span style="font-size: 20px;">&#128200;</span>
-                                          </td>
-                                          <td style="font-size: 14px; color: #cbd5e1; line-height: 1.5;">
-                                            <strong style="color: #f8fafc;">Simulations</strong><br/>
-                                            <span style="color: #94a3b8;">Test pricing changes risk-free</span>
-                                          </td>
-                                        </tr>
-                                      </table>
-                                    </td>
-                                  </tr>
-                                </table>
-                              </td>
-                            </tr>
-                          </table>
-                          
-                          <!-- CTA Button -->
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                
+                <!-- Card 2: Smart Insights -->
+                <tr>
+                  <td style="padding-bottom: 12px;">
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%" style="background: linear-gradient(135deg, #1e293b 0%%, #0f172a 100%%); border-radius: 12px; border: 1px solid #334155;">
+                      <tr>
+                        <td style="padding: 20px 24px;">
                           <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%">
                             <tr>
-                              <td style="text-align: center;">
-                                <a href="%s" style="display: inline-block; padding: 16px 48px; background: linear-gradient(135deg, #8b5cf6 0%%, #d946ef 100%%); color: #ffffff; text-decoration: none; font-weight: 600; font-size: 16px; border-radius: 12px;">
-                                  Start Exploring &#8594;
-                                </a>
+                              <td style="width: 48px; vertical-align: middle;">
+                                <div style="width: 44px; height: 44px; background: linear-gradient(135deg, rgba(251, 191, 36, 0.2) 0%%, rgba(245, 158, 11, 0.2) 100%%); border-radius: 10px; text-align: center; line-height: 44px;">
+                                  <span style="font-size: 22px;">&#128161;</span>
+                                </div>
+                              </td>
+                              <td style="padding-left: 16px; vertical-align: middle;">
+                                <p style="margin: 0 0 4px 0; font-size: 16px; font-weight: 600; color: #f8fafc;">Smart Insights</p>
+                                <p style="margin: 0; font-size: 14px; color: #94a3b8;">Get data-driven pricing recommendations</p>
                               </td>
                             </tr>
                           </table>
-                          
                         </td>
-                        <td style="width: 50px; vertical-align: top; padding-top: 40px; text-align: center;">
-                          <span style="font-size: 32px;">&#129321;</span>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                
+                <!-- Card 3: Simulations -->
+                <tr>
+                  <td style="padding-bottom: 12px;">
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%" style="background: linear-gradient(135deg, #1e293b 0%%, #0f172a 100%%); border-radius: 12px; border: 1px solid #334155;">
+                      <tr>
+                        <td style="padding: 20px 24px;">
+                          <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%">
+                            <tr>
+                              <td style="width: 48px; vertical-align: middle;">
+                                <div style="width: 44px; height: 44px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%%, rgba(6, 182, 212, 0.2) 100%%); border-radius: 10px; text-align: center; line-height: 44px;">
+                                  <span style="font-size: 22px;">&#128200;</span>
+                                </div>
+                              </td>
+                              <td style="padding-left: 16px; vertical-align: middle;">
+                                <p style="margin: 0 0 4px 0; font-size: 16px; font-weight: 600; color: #f8fafc;">Simulations</p>
+                                <p style="margin: 0; font-size: 14px; color: #94a3b8;">Test pricing changes before going live</p>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                
+                <!-- Card 4: PDF Reports -->
+                <tr>
+                  <td>
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%" style="background: linear-gradient(135deg, #1e293b 0%%, #0f172a 100%%); border-radius: 12px; border: 1px solid #334155;">
+                      <tr>
+                        <td style="padding: 20px 24px;">
+                          <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%">
+                            <tr>
+                              <td style="width: 48px; vertical-align: middle;">
+                                <div style="width: 44px; height: 44px; background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%%, rgba(244, 63, 94, 0.2) 100%%); border-radius: 10px; text-align: center; line-height: 44px;">
+                                  <span style="font-size: 22px;">&#128196;</span>
+                                </div>
+                              </td>
+                              <td style="padding-left: 16px; vertical-align: middle;">
+                                <p style="margin: 0 0 4px 0; font-size: 16px; font-weight: 600; color: #f8fafc;">PDF Reports</p>
+                                <p style="margin: 0; font-size: 14px; color: #94a3b8;">Export professional analysis reports</p>
+                              </td>
+                            </tr>
+                          </table>
                         </td>
                       </tr>
                     </table>
@@ -471,9 +519,110 @@ func (s *EmailService) SendWelcomeEmail(ctx context.Context, toEmail string) err
             </td>
           </tr>
           
+          <!-- Section Title: Quick Start -->
+          <tr>
+            <td style="padding: 32px 0 16px 0; text-align: center;">
+              <h2 style="margin: 0; font-size: 20px; font-weight: 600; color: #f8fafc;">
+                &#128640; Quick Start Guide
+              </h2>
+            </td>
+          </tr>
+          
+          <!-- Steps Card -->
+          <tr>
+            <td>
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%" style="background-color: #1e293b; border-radius: 16px; border: 1px solid #334155;">
+                <tr>
+                  <td style="padding: 28px 32px;">
+                    
+                    <!-- Step 1 -->
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%" style="padding-bottom: 20px;">
+                      <tr>
+                        <td style="width: 36px; vertical-align: top;">
+                          <div style="width: 28px; height: 28px; background: linear-gradient(135deg, #8b5cf6 0%%, #d946ef 100%%); border-radius: 50%%; text-align: center; line-height: 28px; font-size: 14px; font-weight: 700; color: #fff;">1</div>
+                        </td>
+                        <td style="padding-left: 12px; vertical-align: top;">
+                          <p style="margin: 0 0 2px 0; font-size: 15px; font-weight: 600; color: #f8fafc;">Add Your Pricing Plans</p>
+                          <p style="margin: 0; font-size: 13px; color: #94a3b8;">Import from your website or enter manually</p>
+                        </td>
+                      </tr>
+                    </table>
+                    
+                    <!-- Step 2 -->
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%" style="padding-bottom: 20px;">
+                      <tr>
+                        <td style="width: 36px; vertical-align: top;">
+                          <div style="width: 28px; height: 28px; background: linear-gradient(135deg, #8b5cf6 0%%, #d946ef 100%%); border-radius: 50%%; text-align: center; line-height: 28px; font-size: 14px; font-weight: 700; color: #fff;">2</div>
+                        </td>
+                        <td style="padding-left: 12px; vertical-align: top;">
+                          <p style="margin: 0 0 2px 0; font-size: 15px; font-weight: 600; color: #f8fafc;">Discover Competitors</p>
+                          <p style="margin: 0; font-size: 13px; color: #94a3b8;">Let AI find and analyze your market</p>
+                        </td>
+                      </tr>
+                    </table>
+                    
+                    <!-- Step 3 -->
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%">
+                      <tr>
+                        <td style="width: 36px; vertical-align: top;">
+                          <div style="width: 28px; height: 28px; background: linear-gradient(135deg, #8b5cf6 0%%, #d946ef 100%%); border-radius: 50%%; text-align: center; line-height: 28px; font-size: 14px; font-weight: 700; color: #fff;">3</div>
+                        </td>
+                        <td style="padding-left: 12px; vertical-align: top;">
+                          <p style="margin: 0 0 2px 0; font-size: 15px; font-weight: 600; color: #f8fafc;">Get AI Analysis</p>
+                          <p style="margin: 0; font-size: 13px; color: #94a3b8;">Receive actionable pricing insights</p>
+                        </td>
+                      </tr>
+                    </table>
+                    
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Stats Row -->
+          <tr>
+            <td style="padding-top: 24px;">
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%">
+                <tr>
+                  <td style="width: 33.33%%; padding-right: 8px;">
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%" style="background-color: #1e293b; border-radius: 12px; border: 1px solid #334155;">
+                      <tr>
+                        <td style="padding: 16px; text-align: center;">
+                          <p style="margin: 0 0 4px 0; font-size: 24px; font-weight: 700; color: #8b5cf6;">10+</p>
+                          <p style="margin: 0; font-size: 12px; color: #94a3b8;">Free Credits</p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                  <td style="width: 33.33%%; padding: 0 4px;">
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%" style="background-color: #1e293b; border-radius: 12px; border: 1px solid #334155;">
+                      <tr>
+                        <td style="padding: 16px; text-align: center;">
+                          <p style="margin: 0 0 4px 0; font-size: 24px; font-weight: 700; color: #10b981;">5min</p>
+                          <p style="margin: 0; font-size: 12px; color: #94a3b8;">Setup Time</p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                  <td style="width: 33.33%%; padding-left: 8px;">
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%" style="background-color: #1e293b; border-radius: 12px; border: 1px solid #334155;">
+                      <tr>
+                        <td style="padding: 16px; text-align: center;">
+                          <p style="margin: 0 0 4px 0; font-size: 24px; font-weight: 700; color: #fbbf24;">24/7</p>
+                          <p style="margin: 0; font-size: 12px; color: #94a3b8;">AI Available</p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
           <!-- Bottom Celebration -->
           <tr>
-            <td style="text-align: center; padding-top: 24px;">
+            <td style="text-align: center; padding-top: 32px;">
               <span style="font-size: 28px;">&#127878; &#127880; &#127873; &#127880; &#127878;</span>
             </td>
           </tr>
@@ -485,7 +634,7 @@ func (s *EmailService) SendWelcomeEmail(ctx context.Context, toEmail string) err
                 Questions? Just reply to this email — we're here to help!
               </p>
               <p style="margin: 16px 0 0 0; font-size: 12px; color: #475569;">
-                &copy; 2025 Revalyze B.V. &bull; Amsterdam, Netherlands
+                &copy; 2025 Revalyze B.V. &bull; Utrecht, Netherlands
               </p>
             </td>
           </tr>
